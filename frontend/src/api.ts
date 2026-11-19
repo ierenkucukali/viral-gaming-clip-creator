@@ -1582,7 +1582,7 @@ export const api = {
   words: (id: string, start: number, end: number) =>
     req<Word[]>("GET", `${P(id)}/words?start=${start}&end=${end}`),
   create: (body: { url?: string; path?: string; mode: Mode; language: string; full_upload?: boolean;
-    clip_style?: "streamer" | "direct" | "both"; streamer?: string; trim_first?: boolean }) =>
+    clip_style?: "streamer" | "direct" | "both"; streamer?: string; trim_first?: boolean; section?: [number, number] }) =>
     req<Job>("POST", "/api/projects", body),
   transcribe: (id: string, language = "auto", force = false) =>
     req<Job>("POST", `${P(id)}/transcribe`, { language, force }),

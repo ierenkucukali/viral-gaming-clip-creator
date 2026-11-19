@@ -185,7 +185,13 @@ export function TrimCard() {
   if (list.length === 0) return null;
   return (
     <>
-      {list.map((v) => <TrimEditor key={v.id} v={v} onDone={() => setList(list.filter((x) => x.id !== v.id))} />)}
+      {list.map((v) => (
+        <TrimEditor key={v.id} v={v} frameUrl={(t) => urls.frame(v.id, t, 480)}
+          onStart={async (a, b) => {
+            await req("POST", `/api/gaming/trim/${encodeURIComponent(v.id)}`, { start: a, end: b });
+            setList(list.filter((x) => x.id !== v.id));
+          }} />
+      ))}
     </>
   );
 }
@@ -206,7 +212,10 @@ function TimeBox({ label, value, max, onChange }: { label: string; value: number
   );
 }
 
-function TrimEditor({ v, onDone }: { v: TrimVideo; onDone: () => void }) {
+export function TrimEditor({ v, frameUrl, onStart, note, onCancel }: {
+  v: TrimVideo; frameUrl: (t: number) => string; onStart: (a: number, b: number) => Promise<void>;
+  note?: string; onCancel?: () => void;
+}) {
   const { t } = useI18n();
   const D = Math.max(60, v.duration);
   const [start, setStart] = useState(0);
@@ -214,11 +223,11 @@ function TrimEditor({ v, onDone }: { v: TrimVideo; onDone: () => void }) {
   const [est, setEst] = useState<{ clips: number; stories: number; total_s: number; stages: Record<string, number> } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [frames, setFrames] = useState({ a: 0, b: Math.max(0, D - 2) });
+  const [frames, setFrames] = useState({ a: 0, b: Math.max(0, D - 15) });
   const len = Math.max(0, end - start);
   useEffect(() => {
     const h = window.setTimeout(() => {
-      setFrames({ a: start, b: Math.max(start, end - 2) });
+      setFrames({ a: start, b: Math.max(start, end - 15) });
       req<any>("GET", `/api/gaming/estimate?minutes=${(len / 60).toFixed(1)}&style=${v.style}`).then(setEst).catch(() => setEst(null));
     }, 350);
     return () => window.clearTimeout(h);
@@ -228,8 +237,7 @@ function TrimEditor({ v, onDone }: { v: TrimVideo; onDone: () => void }) {
     setBusy(true);
     setErr(null);
     try {
-      await req("POST", `/api/gaming/trim/${encodeURIComponent(v.id)}`, { start: a, end: b });
-      onDone();
+      await onStart(a, b);
     } catch (e) {
       setErr(String((e as Error).message || e));
     } finally {
@@ -243,10 +251,10 @@ function TrimEditor({ v, onDone }: { v: TrimVideo; onDone: () => void }) {
         <span className="chip chip-outline">{v.style === "both" ? t("gx.style_both") : v.style === "direct" ? t("gx.style_direct_short") : t("gx.style_streamer_short")}</span>
       </div>
       <p className="small"><b>{v.title}</b> · {hms(v.duration)}{v.streamer ? ` · ${v.streamer}` : ""}</p>
-      <p className="muted small">{t("gx.trim_hint")}</p>
+      <p className="muted small">{note ?? t("gx.trim_hint")}</p>
       <div className="gx-trim-frames">
-        <figure><img src={urls.frame(v.id, frames.a, 480)} alt="" /><figcaption className="small mono">{t("gx.trim_from")} {hms(start)}</figcaption></figure>
-        <figure><img src={urls.frame(v.id, frames.b, 480)} alt="" /><figcaption className="small mono">{t("gx.trim_to")} {hms(end)}</figcaption></figure>
+        <figure><img src={frameUrl(frames.a)} alt="" /><figcaption className="small mono">{t("gx.trim_from")} {hms(start)}</figcaption></figure>
+        <figure><img src={frameUrl(frames.b)} alt="" /><figcaption className="small mono">{t("gx.trim_to")} {hms(end)}</figcaption></figure>
       </div>
       <div className="gx-trim-bars">
         <label className="small">{t("gx.trim_from")}
@@ -269,6 +277,7 @@ function TrimEditor({ v, onDone }: { v: TrimVideo; onDone: () => void }) {
       <div className="gx-actions">
         <button className="btn btn-primary" disabled={busy || len < 60} onClick={() => go(start, end)}>{t("gx.trim_start")}</button>
         <button className="btn btn-ghost" disabled={busy} onClick={() => go(0, D)}>{t("gx.trim_whole")}</button>
+        {onCancel && <button className="btn btn-ghost" disabled={busy} onClick={onCancel}>{t("buf.cancel")}</button>}
         {busy && <span className="spinner" aria-hidden />}
       </div>
       {err && <div className="notice notice-danger small" role="status">{err}</div>}

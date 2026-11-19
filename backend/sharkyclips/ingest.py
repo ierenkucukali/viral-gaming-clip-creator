@@ -156,7 +156,28 @@ def _cancel_requested() -> bool:
         return False
 
 
-def _ingest_url(url: str) -> tuple[Project, dict]:
+def _cut(src: Path, start: float, end: float) -> None:
+    import subprocess
+
+    from .procs import no_window
+
+    tmp = src.with_name(f"cut_part{src.suffix}")
+    cmd = [require_tool("ffmpeg"), "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}", "-i", str(src),
+           "-t", f"{end - start:.3f}", "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-avoid_negative_ts",
+           "make_zero", "-movflags", "+faststart", str(tmp)]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=7200, **no_window())
+    if r.returncode != 0 or not tmp.is_file() or tmp.stat().st_size < 1024:
+        tmp.unlink(missing_ok=True)
+        raise SharkyClipsError(f"Cutting the video failed: {(r.stderr or '').strip()[:200]}")
+    os.replace(tmp, src)
+
+
+def _hms(t: float) -> str:
+    t = int(round(t))
+    return f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}"
+
+
+def _ingest_url(url: str, section: tuple[float, float] | None = None) -> tuple[Project, dict]:
     from . import netguard
 
     netguard.check_public_url(url)  # 1.2.52: no imports from this PC / the local network (SSRF)
@@ -183,12 +204,22 @@ def _ingest_url(url: str) -> tuple[Project, dict]:
                                "Use the YouTube LIVE card to record it from now, or wait until the stream "
                                "ends and import the VOD/replay URL.")
     title = info.get("title") or info.get("id") or "video"
+    if section:  # local fork: only this part is downloaded (a long VOD trimmed before the download)
+        a, b = float(section[0]), float(section[1])
+        dur = float(info.get("duration") or 0)
+        if dur:
+            b = min(b, dur)
+        if b - a < 60:
+            raise SharkyClipsError("Pick at least 1 minute of the video.")
+        section = (max(0.0, a), b)
+        title = f"{title} [{_hms(section[0])}-{_hms(section[1])}]"
     canonical = info.get("webpage_url") or lookup
     media = info.get("media_url") or canonical  # the Kick fallback downloads its HLS playlist
     for found in {canonical, media, info.get("url") if info.get("extractor_key") == "Generic" else None}:
         if found and is_url(str(found)):
             netguard.check_public_url(str(found))  # a redirect to a local address
-    project = project_for_id(make_project_id(title, f"url:{info.get('extractor_key')}:{info.get('id') or canonical}"))
+    part = f":{int(section[0])}-{int(section[1])}" if section else ""
+    project = project_for_id(make_project_id(title, f"url:{info.get('extractor_key')}:{info.get('id') or canonical}{part}"))
     project.dir.mkdir(parents=True, exist_ok=True)
 
     if project.source_path is None:
@@ -238,18 +269,24 @@ def _ingest_url(url: str) -> tuple[Project, dict]:
         "upload_date": info.get("upload_date"),
         "category": next((c for c in info.get("categories") or [] if c), None),  # Kick: the game
         "title": title,
+        **({"section": list(section), "full_duration": info.get("duration")} if section else {}),
     }
 
 
 # ----------------------------------------------------------------------- main
 
 
-def ingest(source: str, mode: str = "gaming") -> Project:
+def ingest(source: str, mode: str = "gaming", section: tuple[float, float] | None = None) -> Project:
+    """section (local fork, URLs only): download just start..end seconds of the video."""
     if mode not in MODES:
         raise SharkyClipsError(f"Unknown mode '{mode}'.", f"Use one of: {', '.join(MODES)}")
-    project, src_info = _ingest_url(source) if is_url(source) else _ingest_file(source)
+    project, src_info = _ingest_url(source, section) if is_url(source) else _ingest_file(source)
     src_path = project.source_path
     assert src_path is not None
+    if section and not project.audio_path.is_file():
+        # local fork: the whole VOD was downloaded at full speed (a part-download runs at about
+        # real-time speed); keep only the picked part (stream copy, seconds), before the audio
+        _cut(src_path, float(src_info["section"][0]), float(src_info["section"][1]))
 
     media = audio.probe(src_path)
     if not media["has_audio"]:

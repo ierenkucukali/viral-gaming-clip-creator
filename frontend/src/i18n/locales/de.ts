@@ -3180,6 +3180,8 @@ const de: Record<string, string> = {
   "gx.trim_start": "Start clipping this part",
   "gx.trim_whole": "Use the whole video",
   "stage.trimming": "Cutting the video",
+  "gx.preview_pick": "Preview & pick the part",
+  "gx.trim_link_hint": "Nothing is downloaded yet: the pictures come from YouTube's preview. Pick the part, then the video downloads at full speed and only that part is kept and clipped.",
 };
 
 export default de;

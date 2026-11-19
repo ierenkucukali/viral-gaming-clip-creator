@@ -7,7 +7,7 @@ import { api, req, uploadFile } from "../api";
 import { useI18n } from "../i18n";
 import { href } from "../router";
 import { BufferPicker, BufferSchedule, BufferSetupCard, type BView } from "../components/Buffer";
-import { EstimateCard, ProgressCard, PromptCard, TrimCard } from "../components/GamingExtras";
+import { EstimateCard, ProgressCard, PromptCard, TrimCard, TrimEditor } from "../components/GamingExtras";
 
 type LiveState =
   | "starting" | "connecting" | "recording" | "reconnecting" | "paused" | "stopped" | "ended" | "failed"
@@ -258,10 +258,17 @@ function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle })
   };
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [link, setLink] = useState<{ token: string; title: string; duration: number; uploader: string | null; url: string } | null>(null);
   const submit = async () => {
     setBusy(true);
     setMsg(null);
     try {
+      if (kind === "vod" && trimFirst) {  // preview + trim WITHOUT downloading (YouTube storyboard)
+        const p = await req<{ token: string; title: string; duration: number; uploader: string | null; frames: boolean }>(
+          "POST", "/api/gaming/probe", { url: value.trim() });
+        setLink({ ...p, url: value.trim() });
+        return;
+      }
       const body = kind === "file" ? { path: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style, streamer, trim_first: trimFirst }
         : { url: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style, streamer, trim_first: trimFirst };
       await api.create(body);
@@ -332,9 +339,24 @@ function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle })
         <span className="small">{t("gx.trim_first")}</span>
       </label>
       <button className="btn btn-primary" disabled={busy || !value.trim()} onClick={submit} style={{ marginTop: 8 }}>
-        {t("gaming.import")}
+        {kind === "vod" && trimFirst ? t("gx.preview_pick") : t("gaming.import")}
       </button>
       {msg && <p className="small" style={{ marginTop: 8 }} role="status">{msg === t("gaming.queued") ? t("gx.queued") : msg}</p>}
+      {link && (
+        <TrimEditor
+          v={{ id: link.token, title: link.title, duration: link.duration, style, streamer: streamer || link.uploader }}
+          note={t("gx.trim_link_hint")}
+          frameUrl={(sec) => `/api/gaming/probe/${encodeURIComponent(link.token)}/frame.jpg?t=${Math.round(sec)}`}
+          onCancel={() => setLink(null)}
+          onStart={async (a, b) => {
+            const whole = a <= 1 && b >= link.duration - 1;
+            await api.create({ url: link.url, mode: "gaming", language: "auto", clip_style: style, streamer,
+              ...(whole ? {} : { section: [a, b] as [number, number] }) });
+            setLink(null);
+            setValue("");
+            setMsg(t("gaming.queued"));
+          }} />
+      )}
     </div>
   );
 }

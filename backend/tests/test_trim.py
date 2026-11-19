@@ -63,3 +63,37 @@ def test_trim_keeps_the_picked_part_and_then_transcribes(monkeypatch):
     assert not (d / "chat.json").exists()
     assert started == [(pid, "en")]
     assert c.get("/api/gaming/trim").json()["videos"] == []
+
+
+def test_link_preview_cuts_the_right_picture_from_the_storyboard(monkeypatch):
+    import io
+    import time as _t
+
+    from PIL import Image
+
+    from sharkyclips import linkpreview as L
+
+    # a 3x3 sprite sheet: tile i is filled with gray level 20*i; two sheets of 90 s (a picture every 10 s)
+    def sheet(base):
+        im = Image.new("RGB", (3 * 32, 3 * 18))
+        for i in range(9):
+            im.paste((20 * (i + base),) * 3, ((i % 3) * 32, (i // 3) * 18, (i % 3 + 1) * 32, (i // 3 + 1) * 18))
+        b = io.BytesIO()
+        im.save(b, "PNG")
+        return b.getvalue()
+
+    sheets = {0: sheet(0), 1: sheet(3)}
+    monkeypatch.setattr(L, "_sheet", lambda token, n, url, headers: sheets[n])
+    L._links["tok"] = {"url": "u", "at": _t.time(), "duration": 180.0, "stream": {
+        "frags": [{"url": "https://x/0", "duration": 90.0}, {"url": "https://x/1", "duration": 90.0}],
+        "rows": 3, "cols": 3, "w": 32, "h": 18, "headers": {}}}
+
+    def gray(t):
+        im = Image.open(io.BytesIO(L.frame("tok", t))).convert("L")
+        return im.getpixel((im.width // 2, im.height // 2))
+
+    assert abs(gray(5) - 0) < 8          # sheet 0, tile 0
+    assert abs(gray(45) - 80) < 8        # sheet 0, tile 4
+    assert abs(gray(95) - 60) < 8        # sheet 1, tile 0 (base 3 -> 60)
+    assert abs(gray(179) - 220) < 8      # sheet 1, tile 8
+    L._links.pop("tok", None)

@@ -7,6 +7,58 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.61] - 2026-11-19
+### Trim a YouTube link before it downloads
+- **Preview & pick the part, without downloading.** With "Let me trim the video before clipping"
+  on, a YouTube link opens the trim card in a few seconds: the pictures come from YouTube's own
+  preview (storyboard), nothing is downloaded. Pick the hours you want; then the video downloads at
+  full speed, only that part is kept (cut without re-encoding) and the clipping starts by itself.
+  (Downloading only a part directly runs at about real-time speed, so this is the fastest way.)
+
+<!-- lang:tr -->
+**Türkçe**
+
+### YouTube linkini indirmeden kırp
+- **Önizle ve kısmı seç, indirmeden.** "Klipten önce kırpayım" açıkken YouTube linki kırpma kartını
+  birkaç saniyede açar: kareler YouTube'un kendi önizlemesinden gelir, hiçbir şey indirilmez. İstediğin
+  saatleri seç; sonra video tam hızda iner, sadece o kısım tutulur (yeniden kodlamadan kesilir) ve
+  klip üretimi kendiliğinden başlar.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- YouTube-Link vor dem Download zuschneiden: die Vorschaubilder kommen aus YouTubes eigener Vorschau, nichts wird heruntergeladen. Danach lädt das Video mit voller Geschwindigkeit, nur der gewählte Teil bleibt.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- YouTube-link vágása letöltés előtt: az előnézeti képek a YouTube saját előnézetéből jönnek, semmi sem töltődik le. Utána a videó teljes sebességgel letöltődik, csak a kiválasztott rész marad meg.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Обрезка ссылки YouTube до загрузки: кадры предпросмотра берутся из собственного превью YouTube, ничего не скачивается. Затем видео загружается на полной скорости, остаётся только выбранная часть.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- قص رابط YouTube قبل التنزيل: صور المعاينة من معاينة YouTube نفسها، ولا يُنزَّل شيء. بعدها يُنزَّل الفيديو بالسرعة الكاملة ويُحتفظ بالجزء المختار فقط.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- 下载前先裁剪 YouTube 链接：打开“剪辑前先裁剪”后，粘贴链接几秒内就会出现裁剪卡片，预览图来自 YouTube 自带的进度条预览（故事板），不会下载任何内容。选好要用的时间段后，视频以全速下载，只保留所选部分（不重新编码），然后自动开始剪辑。
+
+</details>
+
 ## [1.2.60] - 2026-11-19
 ### Trim a long video before clipping
 - **Pick the part to clip.** With "Let me trim the video before clipping" (Make clips, on by default)

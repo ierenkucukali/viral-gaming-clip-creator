@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from .. import bufferpost, config
 from ..errors import SharkyClipsError
@@ -195,3 +195,28 @@ def api_trim(project_id: str, body: dict) -> dict:
     start = float((body or {}).get("start") or 0)
     end = float((body or {}).get("end") or m.get("duration") or 0)
     return A.submit_trim(project_id, start, end).to_dict()
+
+
+# ===================================================================== preview a link before downloading
+
+
+@router.post("/api/gaming/probe")
+def api_probe(body: dict) -> dict:
+    """Title + length of a video link and a preview token, WITHOUT downloading it."""
+    from .. import linkpreview
+
+    url = str((body or {}).get("url") or "").strip()
+    if not url:
+        raise HTTPException(400, "Paste a link.")
+    return linkpreview.probe(url)
+
+
+@router.get("/api/gaming/probe/{token}/frame.jpg")
+def api_probe_frame(token: str, t: float = 0):
+    from .. import linkpreview
+
+    try:
+        data = linkpreview.frame(token, t)
+    except SharkyClipsError as exc:
+        raise HTTPException(404, exc.message) from exc
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})

@@ -386,7 +386,8 @@ def submit_import(source: str, mode: str, language: str, title: str,
 
         jobs.update(job, stage="starting", progress=None)
         try:
-            project = ingest(source, mode=mode)
+            sec = (extra or {}).get("section")
+            project = ingest(source, mode=mode, section=(float(sec[0]), float(sec[1])) if sec else None)
         finally:
             if cleanup is not None:
                 cleanup.unlink(missing_ok=True)  # the project keeps its own (hard-linked) copy
@@ -1683,6 +1684,9 @@ def api_create(body: dict, request: Request) -> dict:
         extra = {**(extra or {}), "streamer": str(body["streamer"]).strip()[:60]}
     if body.get("trim_first"):  # local fork: pick the part to clip before the analysis
         extra = {**(extra or {}), "trim_first": True}
+    sec = body.get("section")
+    if isinstance(sec, (list, tuple)) and len(sec) == 2:  # local fork: download only start..end (links)
+        extra = {**(extra or {}), "section": [float(sec[0]), float(sec[1])], "trim_first": False}
     return submit_import(source, mode, language, title, extra=extra).to_dict()
 
 
