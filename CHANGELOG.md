@@ -7,6 +7,80 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.55] - 2026-11-19
+### Buffer: you send, Buffer posts (this PC can be off)
+- **Send when the app is open, Buffer does the rest.** "Pick & send" shows how much room Buffer
+  has now (the free plan holds 10 scheduled posts per channel, posts you made in Buffer itself count
+  too). Pick that many clips and press Send: they go into Buffer right away, each with its own time,
+  and Buffer posts them while this PC is off. Nothing waits on this PC and nothing runs in the
+  background, so a closed app never causes errors. When those are posted, open the app and send the
+  next ones; new posts continue after the ones already in Buffer.
+- **Posting plan (Schedule tab).** Posts a day per platform, and at what times: spread over the day
+  (first and last post), every 15 min to 4 h from a start time (what doesn't fit moves to the next
+  day), or fixed times. "A day looks like this" shows the times. You can also start from a date.
+- **Opening the Schedule tab checks what happened while the app was closed** (posted / failed) and
+  deletes the hosted copies of posted clips.
+- **Change time** moves a post that is in Buffer (Buffer is updated too); Cancel removes it from
+  Buffer; a failed post can be sent again.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Buffer: sen gönder, Buffer paylaşsın (bilgisayar kapalı olabilir)
+- **Uygulama açıkken gönder, gerisini Buffer yapar.** "Seç ve gönder" Buffer'da şu an ne kadar yer
+  olduğunu gösterir (ücretsiz plan kanal başına 10 planlı gönderi tutar; Buffer'da kendin
+  oluşturduğun gönderiler de sayılır). O kadar klip seçip Gönder'e bas: hemen Buffer'a gider, her
+  biri kendi saatini alır ve Buffer bilgisayar kapalıyken paylaşır. Bu bilgisayarda bekleyen ya da
+  arka planda çalışan bir şey yok; uygulama kapalıyken hata olmaz. Onlar paylaşılınca uygulamayı aç,
+  sıradakileri gönder; yeni gönderiler Buffer'dakilerin ardından devam eder.
+- **Paylaşım planı (Takvim sekmesi).** Platform başına günde kaç paylaşım ve hangi saatlerde: güne
+  yayılmış, başlangıç saatinden itibaren 15 dk ile 4 saat arası aralıkla (sığmayan ertesi güne
+  geçer) ya da sabit saatler. Belirli bir tarihten de başlatabilirsin.
+- **Takvim sekmesini açınca** uygulama kapalıyken ne olduğuna bakılır (paylaşıldı / hata) ve
+  paylaşılan kliplerin yüklenen kopyaları silinir.
+- **Saati değiştir** Buffer'daki gönderiyi taşır (Buffer da güncellenir); İptal Buffer'dan kaldırır;
+  hata alan gönderi yeniden gönderilebilir.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- **Buffer:** Wenn die App offen ist, zeigt „Auswählen & senden“, wie viel Platz Buffer gerade hat (Gratis-Plan: 10 pro Kanal). So viele Clips senden – sie gehen sofort mit eigener Uhrzeit an Buffer, Buffer postet sie auch bei ausgeschaltetem PC. Nichts läuft im Hintergrund.
+- **Posting-Plan:** Posts pro Tag und Plattform, über den Tag verteilt, alle X Minuten ab einer Startzeit oder zu festen Zeiten; Uhrzeit einzelner Posts änderbar.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- **Buffer:** amikor az app nyitva van, a „Kiválasztás és küldés” megmutatja, mennyi hely van most a Bufferben (ingyenes csomag: csatornánként 10). Ennyi klipet küldj: azonnal a Bufferbe kerülnek saját időponttal, és a Buffer akkor is közzéteszi őket, ha a gép ki van kapcsolva. Semmi sem fut a háttérben.
+- **Közzétételi terv:** napi posztszám platformonként, a napra elosztva, X percenként egy kezdési időtől vagy fix időpontokban; egy poszt ideje módosítható.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- **Buffer:** когда приложение открыто, «Выбрать и отправить» показывает, сколько места сейчас в Buffer (бесплатный план: 10 на канал). Отправьте столько клипов: они сразу уходят в Buffer со своим временем, и Buffer публикует их даже при выключенном ПК. В фоне ничего не работает.
+- **План публикаций:** постов в день на платформу, равномерно в течение дня, каждые X минут от времени старта или в фиксированное время; время отдельного поста можно изменить.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- **Buffer:** عندما يكون التطبيق مفتوحًا، يعرض «الاختيار والإرسال» المساحة المتاحة الآن في Buffer (الخطة المجانية: 10 لكل قناة). أرسل هذا العدد من المقاطع: تذهب فورًا إلى Buffer بأوقاتها، وينشرها Buffer حتى والجهاز مطفأ. لا شيء يعمل في الخلفية.
+- **خطة النشر:** عدد المنشورات يوميًا لكل منصة، موزعة على اليوم أو كل X دقيقة من وقت بدء أو في أوقات ثابتة؛ ويمكن تغيير وقت منشور واحد.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- **Buffer：** 应用打开时，“选择并发送”会显示 Buffer 当前还有多少空位（免费版每个频道最多 10 条排期帖子，你在 Buffer 里自己排的也算）。选这么多剪辑发送：它们会立即进入 Buffer、各自带有发布时间，电脑关机时 Buffer 也会照常发布。后台不运行任何东西，应用关闭也不会出错。
+- **发布计划（排期标签页）：** 每个平台每天发几条、在什么时间：均匀分布、从开始时间起每隔 15 分钟到 4 小时一条，或固定时间；也可以修改单条帖子的时间（Buffer 同步更新）。
+
+</details>
+
 ## [1.2.54] - 2026-11-19
 ### As many clips as the stream gives
 - **The number of clips is automatic.** The AI now lists every story in the stream that works as its

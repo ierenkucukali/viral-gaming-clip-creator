@@ -4840,3 +4840,16 @@ a.edit-note:hover { text-decoration: underline; }
   .gx-clips { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .gx-run-row { grid-template-columns: 1fr; }
 }
+
+/* 1.2.55: posting plan + jobs */
+.gx-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 8px; }
+.gx-plan-grid > div { min-width: 0; padding: 12px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface-2); }
+.gx-example { margin: 8px 0 0; overflow-wrap: anywhere; }
+.gx-jobs { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; }
+.gx-jobs li { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); }
+.gx-jobs li.j-in_buffer { border-color: var(--gold-line); background: var(--gold-soft); }
+.gx-start { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.gx-pv { list-style: none; padding: 0; margin: 0; flex: 1 1 100%; display: grid; gap: 2px; }
+.gx-timeedit { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.gx-room { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0 0; }
+.gx-clip.sent:not(.on) .gx-thumb { opacity: 0.55; }

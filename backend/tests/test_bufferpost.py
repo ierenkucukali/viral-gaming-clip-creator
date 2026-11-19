@@ -10,6 +10,7 @@ import pytest
 
 from sharkyclips import bufferpost as B
 from sharkyclips import config
+from sharkyclips.errors import SharkyClipsError
 
 
 class Resp:
@@ -27,6 +28,9 @@ class FakeNet:
         self.posts: dict[str, dict] = {}
         self.created: list[dict] = []
         self.deleted: list[str] = []
+        self.edited: list[dict] = []
+        self.room_asks = 0
+        self.own: dict[str, int] = {}  # posts the user scheduled in Buffer itself, per channel
         self.uploads: list[str] = []
         self.destroyed: list[str] = []
         self.limit = 10
@@ -65,6 +69,12 @@ class FakeNet:
                 {"id": "chIG", "name": "ig", "service": "instagram", "isDisconnected": False, "isLocked": False},
                 {"id": "chTT", "name": "tt", "service": "tiktok", "isDisconnected": False, "isLocked": False},
                 {"id": "chYT", "name": "yt", "service": "youtube", "isDisconnected": False, "isLocked": False}]}}
+        if "posts(first" in q:  # what is scheduled in Buffer now (also posts made in Buffer itself)
+            self.room_asks += 1
+            nodes = [{"id": k, "channelId": p["channelId"], "dueAt": p["dueAt"]} for k, p in self.posts.items()
+                     if p["status"] == "scheduled" and p["channelId"] in v["ch"]]
+            nodes += [{"id": f"own{k}", "channelId": c, "dueAt": "2026-12-01T10:00:00Z"} for c, n in self.own.items() for k in range(n)]
+            return {"data": {"posts": {"edges": [{"node": n} for n in nodes]}}}
         if "createPost" in q:
             inp = v["input"]
             n = sum(1 for p in self.posts.values() if p["channelId"] == inp["channelId"] and p["status"] == "scheduled")
@@ -74,6 +84,11 @@ class FakeNet:
             self.created.append(inp)
             self.posts[pid] = {"channelId": inp["channelId"], "status": "scheduled", "dueAt": inp["dueAt"]}
             return {"data": {"createPost": {"post": {"id": pid, "dueAt": inp["dueAt"], "status": "scheduled"}}}}
+        if "editPost" in q:
+            inp = v["input"]
+            self.edited.append(inp)
+            self.posts[inp["id"]]["dueAt"] = inp["dueAt"]
+            return {"data": {"editPost": {"post": {"id": inp["id"], "dueAt": inp["dueAt"], "status": "scheduled"}}}}
         if "deletePost" in q:
             self.deleted.append(v["id"])
             self.posts.pop(v["id"], None)
@@ -95,7 +110,7 @@ def env(monkeypatch, tmp_path):
         d = tmp_path / pid
         (d / "clips").mkdir(parents=True)
         cl, cands = {}, []
-        for k in range(1, 8):
+        for k in range(1, 26):
             cid = f"c{k:02d}"
             (d / "clips" / f"{k:02d}_{cid}.mp4").write_bytes(b"\0" * 1000)
             cl[cid] = {"file": f"{k:02d}_{cid}.mp4", "rank": k, "start": 100.0 * k, "end": 100.0 * k + 50, "duration": 50.0}
@@ -149,7 +164,7 @@ def test_ten_a_day_spread_over_the_window():
 
 
 def test_fixed_times_and_per_day_are_flexible():
-    B.save_settings({"per_day": {"youtube": 3}, "times": ["21:00", "12:00", "18:30", "bad"]})
+    B.save_settings({"mode": "times", "per_day": {"youtube": 3}, "times": ["21:00", "12:00", "18:30", "bad"]})
     s = B.settings()
     assert s["times"] == ["12:00", "18:30", "21:00"] and s["per_day"]["youtube"] == 3
     now = datetime(2026, 11, 20, 0, 0).astimezone().astimezone(timezone.utc)
@@ -158,15 +173,15 @@ def test_fixed_times_and_per_day_are_flexible():
     config.update(buffer={})
 
 
-def test_queue_pushes_only_up_to_the_free_plan_limit_and_the_rest_waits(env):
+def test_send_goes_straight_to_buffer_up_to_the_room(env):
     B.test()
-    res = B.enqueue(_picks(7) + _picks(7, "p2"))
-    assert res["added"] == 14 * 3  # one post per platform
-    for _ in range(20):
-        B.tick()
+    r = B.send(_picks(14), wait=True)
+    assert r["count"] == 30 and r["skipped"] == 12  # 10 per channel (free plan), 4 clips x 3 for next time
+    sd = B.sending()
+    assert sd["sent"] == 30 and sd["failed"] == 0 and not sd["running"]
     v = B.view()
     for p in B.PLATFORMS:
-        assert v["platforms"][p]["scheduled"] == 10 and v["platforms"][p]["waiting"] == 4
+        assert v["platforms"][p]["scheduled"] == 10
     assert len(env.net.uploads) == 10  # one upload per clip, shared by the three platforms
     yt = next(c for c in env.net.created if c["channelId"] == "chYT")
     assert yt["mode"] == "customScheduled" and yt["schedulingType"] == "automatic"
@@ -178,62 +193,175 @@ def test_queue_pushes_only_up_to_the_free_plan_limit_and_the_rest_waits(env):
     assert ig["assets"][0]["video"]["url"].startswith("https://res.cloudinary.com/")
     assert ig["assets"][0]["video"]["metadata"]["thumbnailOffset"] == 30000  # the peak
     assert "#ishowspeed" in ig["text"] and "#gta6" in ig["text"]
+    with pytest.raises(SharkyClipsError, match="full"):  # no room left: a clear message, nothing sent
+        B.send([{"project_id": "p1", "cid": "c12"}], wait=True)
+
+
+def test_room_counts_posts_made_in_buffer_itself(env):
+    B.test()
+    env.net.own = {"chTT": 7}
+    r = B.room(fresh=True)
+    assert r["room"] == {"instagram": 10, "tiktok": 3, "youtube": 10}
+    B.send(_picks(5), wait=True)
+    assert B.view()["platforms"]["tiktok"]["scheduled"] == 3
+
+
+def test_nothing_happens_while_the_app_is_closed_or_idle(env):
+    B.test()
+    B.send(_picks(3), wait=True)
+    created = len(env.net.created)
+    for _ in range(5):  # the publish loop while the app is open: never sends anything by itself
+        B.tick()
+    assert len(env.net.created) == created
 
 
 def test_never_twice_on_one_platform(env):
     B.test()
-    B.enqueue(_picks(2))
-    again = B.enqueue(_picks(2))
-    assert again["added"] == 0
+    B.send(_picks(2), wait=True)
+    with pytest.raises(SharkyClipsError, match="already"):
+        B.send(_picks(2), wait=True)
 
 
-def test_sent_posts_free_slots_and_media_is_deleted(env, monkeypatch):
+def test_posted_ones_free_room_and_their_hosted_copy_is_deleted(env):
     B.test()
-    B.enqueue(_picks(1))
-    B.tick()
+    B.send(_picks(10), wait=True)
+    assert B.room(fresh=True)["room"]["tiktok"] == 0
     for p in env.net.posts.values():
         p.update(status="sent", sentAt="2026-11-19T10:00:00Z")
-    later = datetime.now(timezone.utc) + timedelta(days=3)
-    B.tick(now=later, force_sync=True)
+    later = datetime.now(timezone.utc) + timedelta(days=3)  # the next time the app is opened
+    B.tick(now=later)
+    B.tick(now=later + timedelta(hours=1))
     v = B.view()
-    assert all(v["platforms"][p]["sent"] == 1 for p in B.PLATFORMS)
-    assert env.net.destroyed == [f"sharkyclips/{env.net.uploads[0]}"]
+    assert all(v["platforms"][p]["sent"] == 10 and v["platforms"][p]["scheduled"] == 0 for p in B.PLATFORMS)
+    assert len(env.net.destroyed) == 10
+    assert B.room(fresh=True)["room"]["tiktok"] == 10
+    B.send(_picks(3, "p2"), wait=True)  # the next 10 can go now
+    assert B.view()["platforms"]["tiktok"]["scheduled"] == 3
 
 
-def test_cancel_deletes_the_buffer_post(env):
+def test_next_pick_continues_after_the_posts_in_buffer_and_a_start_time_is_kept(env):
     B.test()
-    B.enqueue(_picks(1))
-    B.tick()
-    it = next(i for i in B.load_state()["items"] if i["platform"] == "tiktok")
+    B.send(_picks(4), wait=True)
+    last = max(i["due_at"] for i in _items("instagram"))
+    B.send(_picks(3, "p2"), wait=True)
+    new = [i for i in _items("instagram") if i["project_id"] == "p2"]
+    assert len(new) == 3 and all(i["due_at"] > last for i in new)
+    start = (datetime.now() + timedelta(days=20)).replace(hour=12, minute=0, second=0, microsecond=0)
+    B.send([{"project_id": "p2", "cid": "c10"}], start=start.isoformat(), wait=True)
+    it = next(i for i in _items("instagram") if i["cid"] == "c10" and i["project_id"] == "p2")
+    assert B._parse(it["due_at"]) >= start.astimezone()
+
+
+def test_cancel_deletes_the_buffer_post_and_send_again_works(env):
+    B.test()
+    B.send(_picks(1), wait=True)
+    it = next(i for i in _items("tiktok") if i["state"] == "scheduled")
     B.cancel(it["id"])
     assert env.net.deleted == [it["post_id"]]
-    assert next(i for i in B.load_state()["items"] if i["id"] == it["id"])["state"] == "cancelled"
+    assert next(i for i in _items("tiktok") if i["id"] == it["id"])["state"] == "cancelled"
+    B.retry(it["id"])
+    assert [i["state"] for i in _items("tiktok")] == ["scheduled"]
 
 
-def test_a_refused_key_pauses_instead_of_hammering(env):
+def test_a_refused_key_stops_the_send_with_a_clear_reason(env):
     B.test()
-    B.enqueue(_picks(2))
     env.net.auth_ok = False
-    B.tick()
-    n = env.net.calls
-    B.tick()
-    B.tick()
-    assert env.net.calls == n  # paused
-    assert "refused" in B.view()["paused"]["reason"]
-    env.net.auth_ok = True
-    B.resume()
-    v = B.view()
-    assert v["paused"] is None
-    assert sum(v["platforms"][p]["scheduled"] for p in B.PLATFORMS) == B.MAX_PUSH_PER_TICK  # a few per tick
+    r = B.send(_picks(3), wait=True)
+    sd = B.sending()
+    assert sd["sent"] == 0 and sd["failed"] == r["count"] and "refused" in sd["message"]
+    assert env.net.created == []  # stopped at the first refusal, no hammering
 
 
-def test_missed_slot_moves_to_the_next_free_one(env):
+def test_a_failed_send_is_shown_not_retried_in_the_background(env):
     B.test()
-    B.enqueue(_picks(1))
-    st = B.load_state()
-    for i in st["items"]:
-        i["due_at"] = "2026-01-01T10:00:00.000Z"  # the PC was off
-    B._save_state(st)
-    B.tick()
-    for i in B.load_state()["items"]:
-        assert i["state"] == "scheduled" and B._parse(i["due_at"]) > datetime.now(timezone.utc)
+    env.net.limit = 2  # Buffer refuses more than 2 (e.g. posts made elsewhere at the same time)
+    B.send(_picks(4), wait=True)
+    tt = _items("tiktok")
+    assert [i["state"] for i in tt].count("scheduled") == 2 and [i["state"] for i in tt].count("error") == 2
+    assert "full" in next(i for i in tt if i["state"] == "error")["error"]
+    created = len(env.net.created)
+    for _ in range(3):
+        B.tick()
+    assert len(env.net.created) == created
+
+
+
+# ===================================================================== the posting plan
+
+
+def _sent(net, ids):
+    for pid in ids:
+        net.posts[pid].update(status="sent", sentAt="2026-11-19T10:00:00Z")
+
+
+def _items(platform):
+    return sorted((i for i in B.load_state()["items"] if i["platform"] == platform), key=lambda i: i["due_at"])
+
+
+def test_buffer_calls_match_buffers_real_schema():
+    graphql = pytest.importorskip("graphql")
+    from pathlib import Path
+
+    schema = graphql.build_schema((Path(__file__).parent / "data" / "buffer_schema.graphql").read_text(encoding="utf-8"))
+    for q in (B.Q_ACCOUNT, B.Q_CHANNELS, B.M_CREATE, B.M_DELETE, B.M_EDIT, B.Q_POST, B.Q_SCHEDULED):
+        assert graphql.validate(schema, graphql.parse(q)) == [], q
+    s = B.settings()
+    s["instagram"]["first_comment"] = "#more"
+    for p in B.PLATFORMS:
+        inp = B._input({"platform": p, "caption": "Speed went ALL IN 🔥 #gta6", "title": "Speed <went> ALL IN",
+                        "peak_ms": 30000, "due_at": "2026-11-20T10:00:00.000Z"}, "https://x.test/v.mp4", s, "ch1")
+        errs = []
+        graphql.coerce_input_value(inp, schema.get_type("CreatePostInput"), lambda path, v, e: errs.append(e.message))
+        assert errs == [], (p, errs)
+    errs = []
+    graphql.coerce_input_value({"id": "p1", "dueAt": "2026-11-20T10:00:00.000Z", "mode": "customScheduled"},
+                               schema.get_type("EditPostInput"), lambda path, v, e: errs.append(e.message))
+    assert errs == []
+
+
+def test_interval_mode_every_hour_then_the_next_day():
+    B.save_settings({"mode": "interval", "start_time": "10:00", "gap_min": 60, "per_day": {"tiktok": 10}})
+    s = B.settings()
+    assert B.example_day(s, "tiktok") == [f"{h}:00" for h in range(10, 20)]
+    now = datetime(2026, 11, 20, 0, 0).astimezone().astimezone(timezone.utc)
+    got = B.next_slots({"items": []}, "tiktok", 12, now=now, s=s)
+    assert [x.astimezone().strftime("%d %H:%M") for x in got[9:]] == ["20 19:00", "21 10:00", "21 11:00"]
+    B.save_settings({"gap_min": 120, "per_day": {"tiktok": 10}})  # 10 x 2 h from 10:00: 7 fit before midnight
+    assert B.example_day(None, "tiktok") == ["10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"]
+    config.update(buffer={})
+
+
+def test_moving_a_post_in_buffer_edits_it_there(env):
+    B.test()
+    B.send(_picks(1), wait=True)
+    it = next(i for i in _items("youtube") if i["state"] == "scheduled")
+    when = (datetime.now() + timedelta(days=2)).replace(hour=20, minute=30, second=0, microsecond=0)
+    B.set_time(it["id"], when.isoformat())
+    assert env.net.edited == [{"id": it["post_id"], "dueAt": B._iso(when.astimezone()), "mode": "customScheduled"}]
+    with pytest.raises(SharkyClipsError):
+        B.set_time(it["id"], datetime.now().isoformat())  # not in the past / too soon
+
+
+def test_preview_tells_how_long_a_pick_lasts():
+    B.save_settings({"per_day": {"instagram": 10, "tiktok": 5, "youtube": 10}})
+    pv = B.preview(30, ["instagram", "tiktok"])
+    assert pv["instagram"]["days"] in (3, 4) and pv["tiktok"]["days"] in (6, 7)
+    config.update(buffer={})
+
+
+def test_sent_clips_are_marked_in_the_picker_and_failed_ones_stay_pickable(env):
+    for proj in B._app().list_projects():
+        (proj.dir / "clips.json").write_text("{}")  # the picker only looks at projects with rendered clips
+    B.test()
+    env.net.limit = 1  # Buffer takes one per channel, the second clip fails
+    B.send(_picks(2), wait=True)
+    marks = {(c["project_id"], c["cid"]): c["queued"] for c in B.picker()}
+    assert marks[("p1", "c01")] == {"instagram": "scheduled", "tiktok": "scheduled", "youtube": "scheduled"}
+    assert set(marks[("p1", "c02")].values()) == {"error"}  # shown, and it can be sent again
+    assert marks[("p2", "c01")] == {}
+    env.net.limit = 10
+    B.send([{"project_id": "p1", "cid": "c02"}], wait=True)
+    marks = {(c["project_id"], c["cid"]): c["queued"] for c in B.picker()}
+    assert set(marks[("p1", "c02")].values()) == {"scheduled"}
+    with pytest.raises(SharkyClipsError, match="already"):
+        B.send([{"project_id": "p1", "cid": "c01"}], wait=True)  # never twice

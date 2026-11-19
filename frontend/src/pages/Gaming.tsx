@@ -191,7 +191,7 @@ export default function Gaming() {
             <EstimateCard />
           </>
         )}
-        {tab === "pick" && <BufferPicker onSent={() => setTab("schedule")} goSetup={() => setTab("setup")} />}
+        {tab === "pick" && <BufferPicker goSetup={() => setTab("setup")} />}
         {tab === "schedule" && <BufferSchedule />}
         {tab === "setup" && (
           <>

@@ -16,10 +16,13 @@ day; the app uses about 2-3 per post).
 3. **In the app:** Gaming page > **Setup** > Buffer: paste the keys, press **Save and test**. The
    channels are linked by themselves. Set the posts a day per platform (default 10) and the time
    window (default 10:00-23:00, spread evenly) or fixed times.
-4. **Use it:** Gaming page > **Pick & send**: tick clips, edit title / caption if you like, **Send to
-   Buffer**. Every post gets its own time. Only 10 per channel sit in Buffer at once (free plan); the
-   rest wait in the app and go in when there is room, so open the app now and then (it checks about
-   once a minute while it runs). **Schedule** shows everything by day with Cancel / Plan again.
+4. **Use it (when you like, this PC needn't stay on):** Gaming page > **Pick & send** shows the
+   room in Buffer right now (free plan: 10 scheduled posts per channel). Tick that many clips, edit
+   title / caption if you like, **Send to Buffer**. They go into Buffer at once, each with its own
+   time from the posting plan (Schedule tab: posts a day, spread / every N minutes / fixed times).
+   Buffer posts them while the PC is off. When they are posted, open the app and send the next ones.
+   Nothing runs in the background; opening the Schedule tab checks what was posted and deletes the
+   hosted copies.
 
 What Buffer's API lets us set (developers.buffer.com, checked 2026-11-19): post time (`customScheduled`
 + `dueAt`), caption, the video link + cover frame (`thumbnailOffset`, Instagram / TikTok), YouTube title,

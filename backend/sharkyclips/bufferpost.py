@@ -1,32 +1,30 @@
-"""Buffer publishing (local fork): picked clips go to Buffer, Buffer posts them to Instagram Reels,
-TikTok and YouTube Shorts at the times this app gives them.
+"""Buffer publishing (local fork): you pick clips when this app is open and they go to Buffer right
+away; Buffer then posts them to Instagram Reels, TikTok and YouTube Shorts at their times, also while
+this PC is off. Nothing here waits for the PC: no background sending.
 
-How it works
-  * Keys: the Buffer API key (publish.buffer.com > Settings > API) and a Cloudinary account
-    (cloud name + API key + API secret) are stored encrypted in <settings>/publish_keys.sec.
-  * Buffer's API has no file upload: a video must be at a public, stable https link until it is
-    published. So each clip is uploaded once to the user's own Cloudinary (folder "sharkyclips")
-    right before it goes into Buffer, and deleted there after every platform has published it.
-  * You pick clips on the Gaming page ("Send to Buffer"). Every pick becomes one item per platform
-    in the outbox (<settings>/buffer_outbox.json) with its own time slot: `per_day` posts a day per
-    platform, spread evenly between `window_start` and `window_end` (local time) or on fixed
-    `times`. Buffer's own posting schedule is not used (the API can't change it): every post is
-    created with mode customScheduled + dueAt.
-  * Buffer's free plan keeps at most 10 scheduled posts per channel, so only the next `queue_cap`
-    items per platform are in Buffer at once; the rest wait here and go in as slots free up
-    (the publish loop calls tick() about once a minute; Buffer keeps posting while this PC is off).
-  * Request budget: the free plan allows 600 requests a day. A tick only calls Buffer when an item
-    goes in (1 request) or a scheduled item is past its time (status check, at most every 15 min).
+  * Keys: the Buffer API key (publish.buffer.com > Settings > API) and a Cloudinary account (cloud
+    name + API key + API secret), stored encrypted in <settings>/publish_keys.sec.
+  * Buffer's API has no file upload: each video must be at a public, stable https link until it is
+    published. So every clip is uploaded once to the user's own Cloudinary (folder "sharkyclips")
+    when it is sent, and deleted there after it was posted (checked the next time the app is open).
+  * Room: Buffer's free plan holds 10 scheduled posts per channel. "Pick & send" reads how many are
+    in Buffer now (one request) and sends at most that many more.
+  * Times: every post gets its own time from the posting plan (`per_day` a day per platform: spread
+    between window_start and window_end, every `gap_min` minutes from `start_time`, or fixed `times`),
+    after the posts already in Buffer, or from a date the user picks. Created with mode
+    customScheduled + dueAt (the API can't change Buffer's own posting slots).
+  * While the app is open, the publish loop checks posts whose time has passed (posted / failed) and
+    deletes their hosted copies. Closed: nothing happens, nothing fails.
 
-Docs (2026-11-19): developers.buffer.com (GraphQL at https://api.buffer.com, Bearer key; createPost
-with assets[].video.url, metadata.youtube{title, categoryId, privacy, madeForKids, notifySubscribers},
-metadata.instagram{type: reel, shouldShareToFeed, firstComment}, metadata.tiktok{isAiGenerated}).
+Docs (2026-11-19): developers.buffer.com (GraphQL at https://api.buffer.com, Bearer key). The queries
+and post inputs are checked against Buffer's schema in tests/data/buffer_schema.graphql.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import threading
 import time
@@ -38,8 +36,9 @@ from . import config, secretstore
 from .errors import SharkyClipsError
 from .project import write_json_atomic
 
-API = "https://api.buffer.com"
-CLOUDINARY = "https://api.cloudinary.com/v1_1"
+# tests / the local end-to-end check point these at a fake Buffer + Cloudinary on 127.0.0.1
+API = os.environ.get("SHARKYCLIPS_BUFFER_API") or "https://api.buffer.com"
+CLOUDINARY = os.environ.get("SHARKYCLIPS_CLOUDINARY_API") or "https://api.cloudinary.com/v1_1"
 KEY_FILE = "publish_keys.sec"
 STATE_FILE = "buffer_outbox.json"
 PLATFORMS = ("instagram", "tiktok", "youtube")
@@ -49,11 +48,13 @@ YT_CATEGORIES = {"20": "Gaming", "24": "Entertainment", "23": "Comedy", "22": "P
 LEAD_MIN = 10  # a new slot is at least this far ahead
 SYNC_EVERY_S = 15 * 60
 DAILY_BUDGET = 500  # Buffer free plan: 600 requests / 24 h (shared with Buffer's MCP); keep a margin
-MAX_PUSH_PER_TICK = 4
+SEND_MAX = 200  # clips in one "Send" (the room in Buffer limits it anyway)
+ROOM_CACHE_S = 60
 MAX_UPLOAD_BYTES = 99 * 1024 * 1024  # Cloudinary free plan: 100 MB per video
 CAPTION_MAX = {"instagram": 2196, "tiktok": 2200, "youtube": 5000}
 LOG_MAX = 300
 FINAL = ("sent", "cancelled", "error")
+MODES = ("spread", "interval", "times")
 
 _lock = threading.RLock()
 
@@ -137,9 +138,15 @@ DEFAULTS = {
     "channel_names": {p: "" for p in PLATFORMS},
     "platforms": {p: True for p in PLATFORMS},
     "per_day": {p: 10 for p in PLATFORMS},
+    # when: "spread" = per_day evenly between window_start and window_end; "interval" = from
+    # start_time every gap_min minutes (per_day a day, the rest the next day); "times" = fixed times
+    "mode": "spread",
     "window_start": "10:00",
     "window_end": "23:00",
+    "start_time": "10:00",
+    "gap_min": 60,
     "times": [],
+    # scheduled posts Buffer holds per channel (free plan: 10)
     "queue_cap": 10,
     "hashtags": "#gta6 #gta #gaming #streamer #fyp",
     "youtube": {"privacy": "public", "category": "20", "made_for_kids": False, "notify": True},
@@ -179,6 +186,11 @@ def settings() -> dict:
     if s["window_end"] <= s["window_start"]:
         s["window_end"] = "23:59"
     s["times"] = sorted({t for t in (_hhmm(x) for x in (s["times"] or [])) if t})
+    s["mode"] = s["mode"] if s["mode"] in MODES else "spread"
+    if s["mode"] == "times" and not s["times"]:
+        s["mode"] = "spread"
+    s["start_time"] = _hhmm(s["start_time"]) or "10:00"
+    s["gap_min"] = _int(s["gap_min"], 5, 720, 60)
     s["queue_cap"] = _int(s["queue_cap"], 1, 100, 10)
     yt = s["youtube"]
     yt["privacy"] = yt["privacy"] if yt.get("privacy") in YT_PRIVACY else "public"
@@ -202,6 +214,7 @@ def save_settings(body: dict) -> dict:
         else:
             new[k] = v
     config.update(buffer=new)
+    _ROOM.update(at=0.0)
     return settings()
 
 
@@ -317,6 +330,12 @@ M_CREATE = """mutation($input: CreatePostInput!) { createPost(input: $input) {
 M_DELETE = """mutation($id: PostId!) { deletePost(input: {id: $id}) {
   ... on DeletePostSuccess { id }
   ... on MutationError { message } } }"""
+M_EDIT = """mutation($input: EditPostInput!) { editPost(input: $input) {
+  ... on PostActionSuccess { post { id dueAt status } }
+  ... on MutationError { message } } }"""
+Q_SCHEDULED = """query($org: OrganizationId!, $ch: [ChannelId!]) {
+  posts(first: 100, input: {organizationId: $org, filter: {status: [scheduled], channelIds: $ch}}) {
+    edges { node { id channelId dueAt } } } }"""
 Q_POST = """query($id: PostId!) { post(input: {id: $id}) { id status dueAt sentAt externalLink
   error { message } } }"""
 
@@ -471,38 +490,80 @@ def _local(dt: datetime) -> datetime:
 
 
 def _day_times(day, n: int, s: dict) -> list[datetime]:
+    """The posting times of one local day (at most n)."""
     tz = datetime.now().astimezone().tzinfo
-    if s["times"]:
-        hh = s["times"][:n]
-        return [datetime.combine(day, datetime.strptime(t, "%H:%M").time(), tz) for t in hh]
-    a = datetime.combine(day, datetime.strptime(s["window_start"], "%H:%M").time(), tz)
-    b = datetime.combine(day, datetime.strptime(s["window_end"], "%H:%M").time(), tz)
+
+    def at(hhmm: str) -> datetime:
+        return datetime.combine(day, datetime.strptime(hhmm, "%H:%M").time(), tz)
+
+    if s["mode"] == "times":
+        return [at(t) for t in s["times"][:n]]
+    if s["mode"] == "interval":
+        first = at(s["start_time"])
+        end = datetime.combine(day + timedelta(days=1), datetime.min.time(), tz)
+        out = [first + timedelta(minutes=s["gap_min"] * i) for i in range(n)]
+        return [t for t in out if t < end]  # never runs into the next day
+    a, b = at(s["window_start"]), at(s["window_end"])
     if n == 1:
         return [a + (b - a) / 2]
     step = (b - a) / (n - 1)
     return [(a + step * i).replace(second=0, microsecond=0) for i in range(n)]
 
 
-def next_slots(st: dict, platform: str, count: int, now: datetime | None = None, s: dict | None = None) -> list[datetime]:
-    """The next `count` free time slots of a platform (local schedule, not before now + LEAD_MIN)."""
+def _taken(st: dict, platform: str) -> list[datetime]:
+    return sorted(d for d in (_parse(i.get("due_at")) for i in st["items"]
+                              if i["platform"] == platform and i["state"] in ("scheduled", "sent")) if d)
+
+
+def next_slots(st: dict, platform: str, count: int, now: datetime | None = None, s: dict | None = None,
+               start: datetime | None = None) -> list[datetime]:
+    """The next `count` free time slots of a platform (local schedule), not before now + LEAD_MIN
+    (and not before `start`, a time the user picked)."""
     s = s or settings()
     now = now or datetime.now(timezone.utc)
-    taken = sorted(d for d in (_parse(i.get("due_at")) for i in st["items"]
-                               if i["platform"] == platform and i["state"] in ("waiting", "scheduled", "sent")) if d)
-    earliest = now + timedelta(minutes=LEAD_MIN)
+    taken = _taken(st, platform)
+    earliest = max(now + timedelta(minutes=LEAD_MIN), start or now)
+    per_day = s["per_day"][platform]
     out: list[datetime] = []
-    day = _local(now).date()
-    for _ in range(400):
-        for t in _day_times(day, s["per_day"][platform], s):
-            if t < earliest:
-                continue
-            if any(abs((t - x).total_seconds()) < 60 for x in taken + out):
+    day = _local(earliest).date()
+    for _ in range(800):
+        times = _day_times(day, per_day, s)
+        used = sum(1 for x in taken + out if _local(x).date() == day)  # pinned / moved posts count too
+        for t in times:
+            if used >= per_day:
+                break
+            if t < earliest or any(abs((t - x).total_seconds()) < 60 for x in taken + out):
                 continue
             out.append(t)
+            used += 1
             if len(out) >= count:
                 return out
         day += timedelta(days=1)
     return out
+
+
+def set_time(item_id: str, when: str, now: datetime | None = None) -> dict:
+    """Move one post that is in Buffer to another time (Buffer is updated too)."""
+    now = now or datetime.now(timezone.utc)
+    t = _parse(when)
+    if t is None:
+        raise SharkyClipsError("That time doesn't look right.")
+    if t.tzinfo is None:
+        t = t.astimezone()
+    if t < now + timedelta(minutes=LEAD_MIN):
+        raise SharkyClipsError(f"Pick a time at least {LEAD_MIN} minutes from now.")
+    with _lock:
+        st = load_state()
+        it = next((i for i in st["items"] if i["id"] == item_id), None)
+        if it is None or it["state"] != "scheduled" or not it.get("post_id"):
+            raise SharkyClipsError("Only a post that is in Buffer can be moved.")
+        d = gql(M_EDIT, {"input": {"id": it["post_id"], "dueAt": _iso(t), "mode": "customScheduled"}}, st).get("editPost") or {}
+        if not (d.get("post") or {}).get("id"):
+            raise SharkyClipsError(f"Buffer: {d.get('message') or 'the time could not be changed'}")
+        it.update(due_at=_iso(t), pinned=True, updated_at=time.time())
+        _log(st, "moved", f"{it['cid']} moved by hand to {it['due_at']}", it["platform"])
+        _save_state(st)
+    return view()
 
 
 # ===================================================================== picker + queue
@@ -534,7 +595,9 @@ def picker() -> list[dict]:
     on: dict[tuple, dict] = {}
     for i in st["items"]:
         if i["state"] != "cancelled":
-            on.setdefault((i["project_id"], i["cid"]), {})[i["platform"]] = i["state"]
+            d = on.setdefault((i["project_id"], i["cid"]), {})
+            if d.get(i["platform"]) not in ("scheduled", "sent"):  # in Buffer / posted wins over a failed try
+                d[i["platform"]] = i["state"]
     out = []
     for project in _app().list_projects():
         if getattr(project, "posts_only", False):
@@ -564,43 +627,149 @@ def picker() -> list[dict]:
     return out
 
 
-def enqueue(picks: list[dict]) -> dict:
-    """picks: [{"project_id", "cid", "platforms": [...], "title"?, "caption"?}] -> outbox items with slots."""
-    s = settings()
-    A = _app()
-    added = []
-    with _lock:
-        st = load_state()
-        for pk in picks:
-            project = A.get_project(str(pk.get("project_id") or ""))
-            cid = str(pk.get("cid") or "")
-            f = _clip_file(project, cid)
-            if f is None:
-                raise SharkyClipsError(f"Clip {cid} isn't rendered (or was deleted).")
-            from .web import state
+_ROOM: dict = {"at": 0.0, "room": {}, "in_buffer": {}, "error": None}
 
-            cand = next((c for c in (state.load_highlights(project) or {}).get("candidates") or [] if c["id"] == cid), {})
-            texts = default_texts(project, cand)
-            title = _clean(str(pk.get("title") or texts["title"]))[:100]
-            caption = str(pk.get("caption") or texts["caption"]).strip()
-            plats = [p for p in (pk.get("platforms") or PLATFORMS) if p in PLATFORMS and s["platforms"].get(p)]
-            for p in plats:
-                if any(i["project_id"] == project.id and i["cid"] == cid and i["platform"] == p
-                       and i["state"] not in ("cancelled", "error") for i in st["items"]):
-                    continue  # never twice on one platform
-                slot = next_slots(st, p, 1, s=s)
-                if not slot:
-                    continue
-                item = {"id": uuid.uuid4().hex[:10], "project_id": project.id, "cid": cid, "platform": p,
-                        "file": str(f), "title": title, "caption": caption[: CAPTION_MAX[p]],
-                        "peak_ms": _peak_ms(project, cid, cand), "due_at": _iso(slot[0]), "state": "waiting",
-                        "post_id": None, "error": None, "created_at": time.time(), "updated_at": time.time()}
-                st["items"].append(item)
-                added.append(item)
-        if added:
-            _log(st, "queued", f"{len(added)} post(s) planned")
-        _save_state(st)
-    return {"added": len(added), "items": added}
+
+def room(fresh: bool = False) -> dict:
+    """How many more posts Buffer takes now per platform: queue_cap minus what is scheduled there
+    (also posts made in Buffer itself). One request, cached for a minute."""
+    s = settings()
+    if not fresh and time.time() - _ROOM["at"] < ROOM_CACHE_S and _ROOM["room"]:
+        return dict(_ROOM)
+    chans = {p: s["channels"].get(p) for p in PLATFORMS if s["platforms"].get(p) and s["channels"].get(p)}
+    counts = {p: 0 for p in chans}
+    err = None
+    if chans and s["organization_id"] and _keys().get("buffer"):
+        try:
+            with _lock:
+                st = load_state()
+                d = gql(Q_SCHEDULED, {"org": s["organization_id"], "ch": list(chans.values())}, st)
+                _save_state(st)
+            by_chan = {v: k for k, v in chans.items()}
+            for e in ((d.get("posts") or {}).get("edges") or []):
+                p = by_chan.get((e.get("node") or {}).get("channelId"))
+                if p:
+                    counts[p] += 1
+        except SharkyClipsError as exc:  # unknown: count our own posts in Buffer instead
+            err = str(exc)
+            st = load_state()
+            counts = {p: sum(1 for i in st["items"] if i["platform"] == p and i["state"] == "scheduled") for p in chans}
+    _ROOM.update(at=time.time(), in_buffer=counts, error=err,
+                 room={p: max(0, s["queue_cap"] - counts.get(p, 0)) for p in chans})
+    return dict(_ROOM)
+
+
+_SEND: dict = {"running": False, "done": 0, "total": 0, "sent": 0, "failed": 0, "skipped": 0,
+               "message": None, "finished_at": None}
+
+
+def sending() -> dict:
+    return dict(_SEND)
+
+
+def send(picks: list[dict], start: str | None = None, wait: bool = False) -> dict:
+    """picks: [{"project_id", "cid", "platforms": [...], "title"?, "caption"?}] -> straight into Buffer
+    (in the background; `sending()` tells the progress). Per platform at most the room Buffer has now;
+    each post gets the next time of the posting plan (or from `start`). Never twice on one platform."""
+    if _SEND["running"]:
+        raise SharkyClipsError("Still sending the last pick. Wait a moment.")
+    s = settings()
+    if not _keys().get("buffer") or not s["organization_id"]:
+        raise SharkyClipsError("Set up Buffer first.", "Gaming page > Setup > Buffer: paste the key, press Save and test.")
+    _cloud()
+    begin = _parse(start) if start else None
+    if begin is not None and begin.tzinfo is None:
+        begin = begin.astimezone()
+    left = dict(room(fresh=True)["room"])
+    A = _app()
+    from .web import state
+
+    st = load_state()
+    on = {(i["project_id"], i["cid"], i["platform"]) for i in st["items"] if i["state"] in ("scheduled", "sent")}
+    todo: list[dict] = []
+    skipped = 0
+    for pk in picks[:SEND_MAX]:
+        project = A.get_project(str(pk.get("project_id") or ""))
+        cid = str(pk.get("cid") or "")
+        f = _clip_file(project, cid)
+        if f is None:
+            raise SharkyClipsError(f"Clip {cid} isn't rendered (or was deleted).")
+        cand = next((c for c in (state.load_highlights(project) or {}).get("candidates") or [] if c["id"] == cid), {})
+        texts = default_texts(project, cand)
+        base = {"project_id": project.id, "cid": cid, "file": str(f),
+                "title": _clean(str(pk.get("title") or texts["title"]))[:100],
+                "caption": str(pk.get("caption") or texts["caption"]).strip(), "peak_ms": _peak_ms(project, cid, cand)}
+        for p in [p for p in (pk.get("platforms") or PLATFORMS) if p in left]:
+            if (project.id, cid, p) in on:
+                continue  # already in Buffer / posted there
+            if left[p] <= 0:
+                skipped += 1  # no room in Buffer now: next time
+                continue
+            left[p] -= 1
+            todo.append({**base, "platform": p, "caption": base["caption"][: CAPTION_MAX[p]]})
+    if not todo:
+        msg = ("Buffer is full right now (the free plan holds 10 posts per channel). Send more when some are posted."
+               if skipped else "These clips are already in Buffer.")
+        raise SharkyClipsError(msg)
+    _SEND.update(running=True, done=0, total=len(todo), sent=0, failed=0, skipped=skipped, message=None, finished_at=None)
+    t = threading.Thread(target=_send_all, args=(todo, begin, s), name="sharkyclips-buffer-send", daemon=True)
+    t.start()
+    if wait:
+        t.join()
+    return {"sending": sending(), "count": len(todo), "skipped": skipped}
+
+
+def _send_all(todo: list[dict], begin: datetime | None, s: dict) -> None:
+    try:
+        for it in todo:
+            with _lock:
+                st = load_state()
+                try:
+                    r = _send_one(st, it, begin, s)
+                except BufferError as exc:
+                    r = "stop" if exc.code in ("UNAUTHORIZED", "FORBIDDEN", "NOKEY", "NOCLOUD", "RATE_LIMIT_EXCEEDED",
+                                               "BUDGET", "NETWORK") else "error"
+                    _record(st, it, "error", error=str(exc))
+                    _SEND["message"] = str(exc)
+                _save_state(st)
+            _SEND["done"] += 1
+            _SEND["sent" if r == "ok" else "failed"] += r != "skip"
+            if r == "stop":
+                _SEND["failed"] += _SEND["total"] - _SEND["done"]
+                break
+    finally:
+        _SEND.update(running=False, finished_at=time.time())
+        _ROOM.update(at=0.0)
+
+
+def _record(st: dict, it: dict, state_: str, **extra) -> dict:
+    item = {"id": uuid.uuid4().hex[:10], "project_id": it["project_id"], "cid": it["cid"], "platform": it["platform"],
+            "file": it["file"], "title": it["title"], "caption": it["caption"], "peak_ms": it.get("peak_ms"),
+            "due_at": it.get("due_at"), "state": state_, "post_id": None, "error": None,
+            "created_at": time.time(), "updated_at": time.time(), **extra}
+    st["items"].append(item)
+    return item
+
+
+def _send_one(st: dict, it: dict, begin: datetime | None, s: dict) -> str:
+    p = it["platform"]
+    slot = next_slots(st, p, 1, None, s, begin)
+    if not slot:
+        raise BufferError("No free time found in the posting plan.", code="NOSLOT")
+    it = {**it, "due_at": _iso(slot[0])}
+    m = _media(st, it)
+    d = gql(M_CREATE, {"input": _input(it, m["url"], s, s["channels"][p])}, st).get("createPost") or {}
+    post = d.get("post")
+    if post and post.get("id"):
+        _record(st, it, "scheduled", post_id=post["id"], media=m["key"])
+        _log(st, "scheduled", f"{it['cid']} in Buffer for {it['due_at']}", p)
+        return "ok"
+    msg = d.get("message") or "Buffer didn't accept the post"
+    if re.search(r"limit", msg, re.I):
+        msg = "Buffer is full for this channel (free plan: 10). Send it again when some are posted."
+    _record(st, it, "error", error=msg)
+    _log(st, "error", f"{it['cid']}: {msg}", p)
+    return "error"
 
 
 def _peak_ms(project, cid: str, cand: dict) -> int | None:
@@ -633,15 +802,17 @@ def cancel(item_id: str) -> dict:
 
 
 def retry(item_id: str) -> dict:
+    """A failed / cancelled post: send it to Buffer again now (if there is room)."""
+    st = load_state()
+    it = next((i for i in st["items"] if i["id"] == item_id), None)
+    if it is None or it["state"] not in ("error", "cancelled"):
+        raise SharkyClipsError("Only a failed or cancelled post can be sent again.")
     with _lock:
         st = load_state()
-        it = next((i for i in st["items"] if i["id"] == item_id), None)
-        if it is None or it["state"] not in ("error", "cancelled"):
-            raise SharkyClipsError("Only a failed or cancelled post can be tried again.")
-        it["state"] = "planning"  # out of the slot list while the new slot is found
-        slot = next_slots(st, it["platform"], 1)
-        it.update(state="waiting", due_at=_iso(slot[0]), error=None, post_id=None, updated_at=time.time())
+        st["items"] = [i for i in st["items"] if i["id"] != item_id]
         _save_state(st)
+    send([{"project_id": it["project_id"], "cid": it["cid"], "platforms": [it["platform"]],
+           "title": it["title"], "caption": it["caption"]}], wait=True)
     return view()
 
 
@@ -727,7 +898,8 @@ def _smaller(f: Path) -> Path:
 
 
 def tick(now: datetime | None = None, force_sync: bool = False) -> list[str]:
-    """Push waiting posts into free Buffer slots, check posts whose time has passed, clean up media."""
+    """While the app is open: check posts whose time has passed (posted / failed) and delete the hosted
+    copies of posted clips. Sends nothing by itself."""
     now = now or datetime.now(timezone.utc)
     acts: list[str] = []
     if not _keys().get("buffer"):
@@ -742,8 +914,7 @@ def tick(now: datetime | None = None, force_sync: bool = False) -> list[str]:
         st["paused"] = None
         try:
             acts += _sync(st, now, force_sync)
-            acts += _push(st, now, s)
-            acts += _cleanup(st, s)
+            acts += _cleanup(st, s, now)
         except BufferError as exc:
             if exc.code in ("UNAUTHORIZED", "FORBIDDEN", "NOKEY", "NOCLOUD"):
                 st["paused"] = {"reason": str(exc), "hint": exc.hint, "until": time.time() + 7 * 86400}
@@ -772,9 +943,9 @@ def _sync(st: dict, now: datetime, force: bool) -> list[str]:
         due = _parse(it["due_at"])
         if not force and (due is None or now < due + timedelta(minutes=3)):
             continue
-        if not force and time.time() - float(it.get("checked_at") or 0) < SYNC_EVERY_S:
+        if not force and now.timestamp() - float(it.get("checked_at") or 0) < SYNC_EVERY_S:
             continue
-        it["checked_at"] = time.time()
+        it["checked_at"] = now.timestamp()
         post = gql(Q_POST, {"id": it["post_id"]}, st).get("post") or {}
         status = post.get("status")
         if status == "sent":
@@ -791,51 +962,7 @@ def _sync(st: dict, now: datetime, force: bool) -> list[str]:
     return acts
 
 
-def _push(st: dict, now: datetime, s: dict) -> list[str]:
-    acts = []
-    pushed = 0
-    for p in PLATFORMS:
-        chan = s["channels"].get(p)
-        if not s["platforms"].get(p) or not chan:
-            continue
-        in_buffer = sum(1 for i in st["items"] if i["platform"] == p and i["state"] == "scheduled")
-        waiting = sorted((i for i in st["items"] if i["platform"] == p and i["state"] == "waiting"),
-                         key=lambda i: i["due_at"])
-        for it in waiting:
-            if in_buffer >= s["queue_cap"] or pushed >= MAX_PUSH_PER_TICK:
-                break
-            due = _parse(it["due_at"])
-            if due is None or due < now + timedelta(minutes=3):  # missed its slot (PC was off): a new one
-                it["state"] = "planning"
-                it["due_at"] = _iso(next_slots(st, p, 1, now, s)[0])
-                it["state"] = "waiting"
-                _log(st, "moved", f"{it['cid']} moved to {it['due_at']}", p)
-            try:
-                m = _media(st, it)
-            except BufferError as exc:
-                if exc.code in ("NOFILE", "TOOBIG"):
-                    it.update(state="error", error=str(exc), updated_at=time.time())
-                    continue
-                raise
-            d = gql(M_CREATE, {"input": _input(it, m["url"], s, chan)}, st).get("createPost") or {}
-            pushed += 1
-            post = d.get("post")
-            if post and post.get("id"):
-                it.update(state="scheduled", post_id=post["id"], media=m["key"], updated_at=time.time())
-                in_buffer += 1
-                _log(st, "scheduled", f"{it['cid']} in Buffer for {it['due_at']}", p)
-                acts.append(f"buffer: {p} {it['cid']} scheduled")
-                continue
-            msg = d.get("message") or "Buffer didn't accept the post"
-            if re.search(r"limit", msg, re.I):
-                _log(st, "full", f"Buffer queue full: {msg}", p)
-                break  # the channel's queue is full: try again on a later tick
-            it.update(state="error", error=msg, updated_at=time.time())
-            _log(st, "error", f"{it['cid']}: {msg}", p)
-    return acts
-
-
-def _cleanup(st: dict, s: dict) -> list[str]:
+def _cleanup(st: dict, s: dict, now: datetime) -> list[str]:
     if not s["delete_after"]:
         return []
     acts = []
@@ -846,7 +973,7 @@ def _cleanup(st: dict, s: dict) -> list[str]:
         if not users or any(i["state"] not in FINAL for i in users):
             continue
         last = max((_parse(i.get("sent_at")) or datetime.fromtimestamp(i.get("updated_at") or 0, timezone.utc)) for i in users)
-        if datetime.now(timezone.utc) - last < timedelta(minutes=30):
+        if now - last < timedelta(minutes=30):
             continue
         if cloud_delete(m["public_id"]):
             m["deleted"] = time.time()
@@ -857,24 +984,50 @@ def _cleanup(st: dict, s: dict) -> list[str]:
 # ===================================================================== view
 
 
+def example_day(s: dict | None = None, platform: str = "tiktok") -> list[str]:
+    """The posting times of a day with the current settings (local HH:MM)."""
+    s = s or settings()
+    day = (datetime.now().astimezone() + timedelta(days=1)).date()
+    return [t.strftime("%H:%M") for t in _day_times(day, s["per_day"][platform], s)]
+
+
 def view() -> dict:
     s = settings()
     st = load_state()
     now = datetime.now(timezone.utc)
     items = sorted(st["items"], key=lambda i: i.get("due_at") or "")
+    rm = dict(_ROOM)
     per = {}
     for p in PLATFORMS:
-        mine = [i for i in items if i["platform"] == p]
+        mine = [i for i in items if i["platform"] == p and i["state"] != "cancelled"]
         nxt = next_slots(st, p, 3, now, s) if s["platforms"][p] else []
-        last = max((i["due_at"] for i in mine if i["state"] in ("waiting", "scheduled")), default=None)
+        last = max((i["due_at"] for i in mine if i["state"] == "scheduled"), default=None)
         per[p] = {"label": LABELS[p], "enabled": s["platforms"][p], "per_day": s["per_day"][p],
                   "channel": s["channels"].get(p) or "", "channel_name": s["channel_names"].get(p) or "",
-                  "waiting": sum(1 for i in mine if i["state"] == "waiting"),
                   "scheduled": sum(1 for i in mine if i["state"] == "scheduled"),
                   "sent": sum(1 for i in mine if i["state"] == "sent"),
                   "errors": sum(1 for i in mine if i["state"] == "error"),
-                  "next_free": [_iso(x) for x in nxt], "planned_until": last}
+                  "room": (rm.get("room") or {}).get(p), "in_buffer": (rm.get("in_buffer") or {}).get(p),
+                  "next_free": [_iso(x) for x in nxt], "planned_until": last, "day": example_day(s, p)}
     return {"settings": s, "keys": keys_view(), "platforms": per, "paused": st["paused"],
-            "requests_24h": len(st["requests"]), "budget": DAILY_BUDGET,
-            "items": [{k: v for k, v in i.items() if k not in ("file",)} for i in items][-400:],
+            "requests_24h": len(st["requests"]), "budget": DAILY_BUDGET, "sending": sending(),
+            "room_checked_at": rm.get("at") or None, "room_error": rm.get("error"),
+            "items": [{k: v for k, v in i.items() if k not in ("file",)} for i in items][-600:],
             "log": st["log"][-60:][::-1], "youtube_categories": YT_CATEGORIES}
+
+
+def preview(count: int, platforms: list[str] | None = None, start: str | None = None) -> dict:
+    """The times `count` clips would get now: per platform the first and the last, and over how many days."""
+    s = settings()
+    st = load_state()
+    begin = _parse(start) if start else None
+    if begin is not None and begin.tzinfo is None:
+        begin = begin.astimezone()
+    out = {}
+    for p in platforms or PLATFORMS:
+        if p not in PLATFORMS or not s["platforms"][p]:
+            continue
+        slots = next_slots(st, p, max(0, min(count, SEND_MAX)), None, s, begin)
+        out[p] = {"first": _iso(slots[0]) if slots else None, "last": _iso(slots[-1]) if slots else None,
+                  "days": len({_local(x).date() for x in slots})}
+    return out

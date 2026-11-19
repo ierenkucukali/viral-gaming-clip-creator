@@ -73,18 +73,31 @@ def api_buffer_thumb(project_id: str, cid: str):
     return FileResponse(dest, media_type="image/jpeg", headers={"Cache-Control": "max-age=86400"})
 
 
-@router.post("/api/buffer/queue")
-def api_buffer_queue(body: dict) -> dict:
+@router.get("/api/buffer/room")
+def api_buffer_room() -> dict:
+    """How many more posts Buffer takes now per platform (asks Buffer)."""
+    bufferpost.room(fresh=True)
+    return bufferpost.view()
+
+
+@router.post("/api/buffer/send")
+def api_buffer_send(body: dict) -> dict:
+    """Send the picked clips to Buffer now (in the background: GET /api/buffer shows "sending")."""
     picks = (body or {}).get("picks") or []
     if not isinstance(picks, list) or not picks:
         raise HTTPException(400, "Pick at least one clip.")
-    res = bufferpost.enqueue(picks[:200])
-    if body.get("push", True):
-        try:
-            bufferpost.tick()
-        except Exception:  # noqa: BLE001 - the publish loop tries again
-            pass
+    res = bufferpost.send(picks, start=body.get("start") or None)
     return {**res, "view": bufferpost.view()}
+
+
+@router.get("/api/buffer/preview")
+def api_buffer_preview(count: int = 1, platforms: str = "", start: str = "") -> dict:
+    return bufferpost.preview(count, [p for p in platforms.split(",") if p] or None, start or None)
+
+
+@router.put("/api/buffer/items/{item_id}/time")
+def api_buffer_time(item_id: str, body: dict) -> dict:
+    return bufferpost.set_time(item_id, str((body or {}).get("due_at") or ""))
 
 
 @router.post("/api/buffer/items/{item_id}/cancel")
@@ -104,7 +117,10 @@ def api_buffer_clear() -> dict:
 
 @router.post("/api/buffer/run")
 def api_buffer_run() -> dict:
-    return {"actions": bufferpost.tick(force_sync=True), "view": bufferpost.view()}
+    """"Check now": which posts were published / failed (asks Buffer), and the room."""
+    acts = bufferpost.tick(force_sync=True)
+    bufferpost.room(fresh=True)
+    return {"actions": acts, "view": bufferpost.view()}
 
 
 @router.post("/api/buffer/resume")
