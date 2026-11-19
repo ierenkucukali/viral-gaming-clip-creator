@@ -851,7 +851,7 @@ def api_edit(project_id: str, cid: str, body: dict) -> dict:
         changes["music"] = bool(body["music"])
     if "banner" in body:  # 1.2.34: None = the AI's headline, "" = no banner, else own text
         b = body.get("banner")
-        changes["banner"] = None if b is None else " ".join(str(b).split())[:80]
+        changes["banner"] = None if b is None else " ".join(str(b).split())[:120]
     if changes:
         E.set_clip_prefs(project, cid, **changes)
     if "start" in body or "end" in body:

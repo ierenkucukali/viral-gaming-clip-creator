@@ -2975,6 +2975,8 @@ const en: Record<string, string> = {
   "autopost.plan_now": "Plan now",
   "autopost.tiktok_consent": "I confirm TikTok's Music Usage Confirmation for automatic TikTok posts",
   "autopost.log": "Auto-post log",
+  // local gaming fork
+  "fit.bg_white": "White (tweet style)",
 };
 
 export default en;

@@ -219,7 +219,7 @@ def banner_text(cand: dict, lang: str | None) -> str:
             text, _n = style_mod.censor(" ".join(story.split()), lang or "en")
         except Exception:  # noqa: BLE001
             text = " ".join(story.split())
-        return text[:80]
+        return text[:120]
     pub = cand.get("publish") or {}
     titles = [t for t in pub.get("titles") or [] if t]
     lang = lang or pub.get("language") or "en"

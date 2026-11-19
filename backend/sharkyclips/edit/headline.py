@@ -18,13 +18,13 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-FONT_PX = 54  # at 1080 px wide
+FONT_PX = 56  # at 1080 px wide (viral Reels captions: 2-3 lines, wide white box)
 LINE_H = 1.22  # line height, x font size
 PAD_X = 0.45  # x font size
 PAD_Y = 0.30
 RADIUS = 0.30  # x line height
-MAX_W = 0.88  # of the canvas width
-MAX_LINES = 2
+MAX_W = 0.92  # of the canvas width
+MAX_LINES = 3
 MIN_SHRINK = 0.6
 EMOJI_PX = 109  # the only size Noto Color Emoji (CBDT) has
 EMOJI_SCALE = 1.08  # emoji height x font size

@@ -2931,6 +2931,8 @@ const tr: Record<string, string> = {
   "autopost.plan_now": "Şimdi planla",
   "autopost.tiktok_consent": "Otomatik TikTok paylaşımları için TikTok'un Müzik Kullanım Onayı'nı kabul ediyorum",
   "autopost.log": "Otomatik paylaşım kaydı",
+  // local gaming fork
+  "fit.bg_white": "Beyaz (tweet tarzı)",
 };
 
 export default tr;

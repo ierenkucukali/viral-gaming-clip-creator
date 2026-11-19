@@ -36,7 +36,7 @@ function blit(ctx: CanvasRenderingContext2D, v: CanvasImageSource, r: Rect, dx: 
 }
 
 // Instagram-style headline: the same numbers as backend/sharkyclips/edit/headline.py (change both).
-const HL = { font: 54, lineH: 1.22, padX: 0.45, padY: 0.3, radius: 0.3, maxW: 0.88, maxLines: 2, minShrink: 0.6 };
+const HL = { font: 56, lineH: 1.22, padX: 0.45, padY: 0.3, radius: 0.3, maxW: 0.92, maxLines: 3, minShrink: 0.6 };
 const HL_FONT = `Arial, "Liberation Sans", Helvetica, "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
 
 /** Lines, font size and box size of the headline on this canvas (null: no text). */
@@ -152,8 +152,8 @@ export default function VerticalPreview({ video, clip, range, options, facecam, 
         if (layout === "crop") {
           blit(ctx, v, zoomRect(coverRect(whole, W, H), z.full), 0, 0, W, H);
         } else if (layout === "fit") {
-          if (options.fit_bg === "black") {
-            ctx.fillStyle = "#000";
+          if (options.fit_bg === "black" || options.fit_bg === "white") {
+            ctx.fillStyle = options.fit_bg === "white" ? "#fff" : "#000";
             ctx.fillRect(0, 0, W, H);
           } else {
             const tc = tiny.getContext("2d")!;

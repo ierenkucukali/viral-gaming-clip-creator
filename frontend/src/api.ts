@@ -285,7 +285,7 @@ export interface ClipOptions {
   game_fit?: "crop" | "blur" | "letterbox";
   game_offset?: number;
   /** layout "fit" background: blurred copy or black bars (direct clip style) */
-  fit_bg?: "blur" | "black";
+  fit_bg?: "blur" | "black" | "white";
   hide_cam?: boolean;
   /** headline for the whole clip ("" = none); "ig" = Instagram-style white box on the split line
    * (edit/headline.py), "brand" = the 1.2.34 box in the brand kit's colour */

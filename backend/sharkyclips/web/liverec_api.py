@@ -458,7 +458,7 @@ def api_gaming_settings_put(body: dict) -> dict:
             changes[k] = bool(body[k])
     if body.get("clip_style") in ("streamer", "direct"):
         changes["clip_style"] = body["clip_style"]
-    if body.get("direct_fit_bg") in ("black", "blur"):
+    if body.get("direct_fit_bg") in ("black", "blur", "white"):
         changes["direct_fit_bg"] = body["direct_fit_bg"]
     if changes:
         config.update(**changes)

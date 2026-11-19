@@ -1420,9 +1420,10 @@ export default function ProjectPage({ id }: { id: string }) {
                         id="fit-bg"
                         className="select select-sm"
                         value={options.fit_bg ?? "blur"}
-                        onChange={(e) => setOption({ fit_bg: e.target.value as "blur" | "black" })}
+                        onChange={(e) => setOption({ fit_bg: e.target.value as "blur" | "black" | "white" })}
                       >
                         <option value="black">{t("fit.bg_black")}</option>
+                        <option value="white">{t("fit.bg_white")}</option>
                         <option value="blur">{t("fit.bg_blur")}</option>
                       </select>
                     </div>

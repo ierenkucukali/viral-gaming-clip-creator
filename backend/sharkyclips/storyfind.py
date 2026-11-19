@@ -24,7 +24,7 @@ from .project import Project
 from .textutil import mmss, sentences
 from .ui import console
 
-STORY_VERSION = 1
+STORY_VERSION = 2  # 2: viral caption headlines (8-16 words, streamer named)
 TYPES = ["funny", "exciting", "fail", "skill", "emotional", "wholesome", "rage", "other"]
 LOCAL_WINDOW_S = 600.0  # local model: 10 minutes of transcript per request
 LOCAL_OVERLAP_S = 120.0
@@ -72,7 +72,7 @@ def schema(max_items: int) -> dict:
                         "end_line": {"type": "integer", "minimum": 0},
                         "type": {"type": "string", "enum": TYPES},
                         "score": {"type": "integer", "minimum": 0, "maximum": 100},
-                        "headline": {"type": "string", "minLength": 6, "maxLength": 60},
+                        "headline": {"type": "string", "minLength": 20, "maxLength": 110},
                         "title": {"type": "string", "minLength": 8, "maxLength": 90},
                         "why": {"type": "string", "minLength": 10, "maxLength": 300},
                     },
@@ -183,7 +183,7 @@ def windows(lines: list[dict], cloud: bool) -> list[tuple[int, int]]:
 def _prompt(meta: dict, text: str, a: int, b: int, st: dict, want: int, part: str) -> str:
     src = meta.get("source") or {}
     return f"""Video: {meta.get('title', '')}
-Channel: {src.get('uploader') or 'unknown'}
+Channel: {src.get('uploader') or 'unknown'} (use the streamer's short, well-known name in the headline)
 {part}
 The transcript is numbered by line (L12) with each line's start time [mm:ss or h:mm:ss]. Tags after a line:
 HYPE n = how intense the audio is there (0-100, relative to this video); laugh / shout / scream / cheer /
@@ -204,9 +204,16 @@ Rules for every story:
   moves on to something else.
 - Length: {st['min']:.0f} to {st['max']:.0f} seconds (aim for about {st['ideal']:.0f} s); use the line times to check.
 - Stories must not overlap each other.
-- headline: on-screen hook in Instagram text style: 3 to 6 English words + exactly one emoji at the end.
-  Viral and curiosity-driven but TRUE to what happens; no swearing, no hashtags, no quotes. Examples:
-  "He did NOT see that coming 😭", "Cops had zero chance 🚔", "Worst getaway driver ever 😂".
+- headline: the viral on-screen caption shown in a white box over the whole clip, written like the big
+  gaming clip pages on Instagram / TikTok: third person, it NAMES the streamer (the short name viewers know,
+  e.g. "Speed" for IShowSpeed), says exactly what happens in this clip, 8 to 16 English words, ONE key word in
+  CAPITALS, then 1-2 emojis at the very end. Curiosity, shock or emotion, but TRUE to the clip; no swearing,
+  no hashtags, no quotes around it. Examples of the style (other streamers):
+  "N3on was SHOCKED after he found a hidden island in GTA 6 😭🙏",
+  "Speed found a homeless NPC and gave him money 🥺❤️‍🩹",
+  "xQc couldn't believe the cops followed him into the ocean 😳😂",
+  "DDG got PRESSED by a Karen and LOST IT in GTA 6 😭💔",
+  "N3on tried talking to a girl and got completely REJECTED by the NPC 😳🌴".
 - title: a YouTube Shorts title in English (max 80 characters, no hashtags).
 - why: one English sentence: what happens and why people will watch until the end.
 - score: 0-100, honest (most good clips 55-75, only rare gems 85+).

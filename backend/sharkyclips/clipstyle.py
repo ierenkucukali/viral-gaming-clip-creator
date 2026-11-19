@@ -15,7 +15,7 @@ from __future__ import annotations
 from . import config
 
 STYLES = ("streamer", "direct")
-FIT_BGS = ("black", "blur")
+FIT_BGS = ("black", "blur", "white")
 
 
 def default() -> str:

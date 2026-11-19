@@ -35,7 +35,7 @@ from .render import Encoder, RenderResult, run_ffmpeg
 OUT_W, OUT_H = 1080, 1920
 SPLIT_TOP = 768  # facecam height in the split layout (40%)
 LAYOUTS = ("auto", "split", "fit", "crop")
-FIT_BGS = ("blur", "black")
+FIT_BGS = ("blur", "black", "white")
 SPLIT_ORDERS = ("top", "bottom")
 GAME_FITS = ("crop", "blur", "letterbox")
 BANNER_STYLES = ("ig", "brand")
@@ -145,7 +145,7 @@ class ClipOptions:
             raise SharkyClipsError(f"Unknown subtitle style '{opts.subtitles}'.",
                                    f"Use one of: {', '.join(SUBTITLE_STYLES)}")
         opts.hook_text = str(opts.hook_text or "").strip()[:120]
-        opts.banner = " ".join(str(opts.banner or "").split())[:80]
+        opts.banner = " ".join(str(opts.banner or "").split())[:120]
         opts.banner_style = opts.banner_style if opts.banner_style in BANNER_STYLES else "ig"
         opts.fit_bg = opts.fit_bg if opts.fit_bg in FIT_BGS else "blur"
         return opts
@@ -848,9 +848,9 @@ def _filter_graph(layout: str, src_w: int, src_h: int, facecam: Facecam | None,
         return f"[{inp}]{cover},setsar=1{add('full')}[{out}]"
     if layout == "fit" and abs(src_w / max(src_h, 1) - W / H) < 0.02:  # same shape: just scale
         return f"[{inp}]scale={W}:{H}:flags=bicubic,setsar=1{add('full')}[{out}]"
-    if layout == "fit" and _SPLIT.get().fit_bg == "black":  # direct clip style: plain black bars
+    if layout == "fit" and _SPLIT.get().fit_bg in ("black", "white"):  # direct clip style: plain bars
         return (f"[{inp}]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=bicubic{add('full')},"
-                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[{out}]")
+                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color={_SPLIT.get().fit_bg},setsar=1[{out}]")
     if layout == "fit":
         # Blur at quarter size (fast), then scale back up.
         bg = (f"scale={W // 4}:{H // 4}:force_original_aspect_ratio=increase,"
