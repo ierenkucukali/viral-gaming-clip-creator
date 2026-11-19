@@ -156,28 +156,30 @@ export function BufferSetupCard({ onReady }: { onReady?: () => void }) {
         <div className="gx-sub">
           <strong>1 · {t("buf.key_title")}</strong>
           <p className="muted small">{t("buf.key_hint")}</p>
-          {v.keys.buffer && <div className="small mono">{t("gaming.ai_saved_key")}: {v.keys.buffer}</div>}
+          {v.keys.buffer && <div className="small"><span className="chip chip-success"><span className="dot" />{t("buf.saved")}</span> <span className="mono">{v.keys.buffer}</span></div>}
           <label className="field">
             <span className="field-label">{t("buf.key")}</span>
             <input className="input input-sm" type="password" autoComplete="off" value={key}
-              placeholder="Buffer API key" onChange={(e) => setKey(e.target.value)} />
+              placeholder={v.keys.has_buffer ? t("buf.saved_keep") : "Buffer API key"} onChange={(e) => setKey(e.target.value)} />
           </label>
         </div>
         <div className="gx-sub">
           <strong>2 · {t("buf.r2_title")}</strong>
           <p className="muted small">{t("buf.r2_hint")}</p>
-          {v.keys.r2.public_url && (
-            <div className="small mono">{v.keys.r2.bucket} · {v.keys.r2.public_url}{v.keys.host === "r2" ? " ✓" : ""}</div>
+          {v.keys.has_r2 && (
+            <div className="small"><span className="chip chip-success"><span className="dot" />{t("buf.saved")}{v.keys.host === "r2" ? ` · ${t("buf.in_use")}` : ""}</span> <span className="mono">{v.keys.r2.bucket}</span></div>
           )}
           <div className="gx-row">
             <label className="field">
               <span className="field-label">Account ID</span>
               <input className="input input-sm" autoComplete="off" value={r2.account_id}
+                placeholder={v.keys.r2.account_id ? `${v.keys.r2.account_id} ✓` : ""}
                 onChange={(e) => setR2({ ...r2, account_id: e.target.value })} />
             </label>
             <label className="field">
               <span className="field-label">Access Key ID</span>
               <input className="input input-sm" autoComplete="off" value={r2.access_key_id}
+                placeholder={v.keys.r2.access_key_id ? `${v.keys.r2.access_key_id} ✓` : ""}
                 onChange={(e) => setR2({ ...r2, access_key_id: e.target.value })} />
             </label>
           </div>
@@ -185,6 +187,7 @@ export function BufferSetupCard({ onReady }: { onReady?: () => void }) {
             <label className="field">
               <span className="field-label">Secret Access Key</span>
               <input className="input input-sm" type="password" autoComplete="off" value={r2.secret_access_key}
+                placeholder={v.keys.r2.has_secret ? t("buf.saved_keep") : ""}
                 onChange={(e) => setR2({ ...r2, secret_access_key: e.target.value })} />
             </label>
             <label className="field">
@@ -195,7 +198,7 @@ export function BufferSetupCard({ onReady }: { onReady?: () => void }) {
           </div>
           <label className="field">
             <span className="field-label">{t("buf.r2_public")}</span>
-            <input className="input input-sm" autoComplete="off" placeholder="https://pub-xxxxxxxx.r2.dev" value={r2.public_url}
+            <input className="input input-sm" autoComplete="off" placeholder={v.keys.r2.public_url ? `${v.keys.r2.public_url} ✓` : "https://pub-xxxxxxxx.r2.dev"} value={r2.public_url}
               onChange={(e) => setR2({ ...r2, public_url: e.target.value })} />
           </label>
           <details className="gx-details">

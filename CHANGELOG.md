@@ -7,6 +7,57 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.58] - 2026-11-19
+### Clearer Setup, no needless re-renders
+- **Saved keys are shown as saved.** The key boxes say "Saved ✓ (leave empty to keep it)" and show a
+  masked hint; a green "Saved · in use" badge marks the video hosting in use.
+- **Opening a Gaming-page video in the Library no longer re-renders its clips** with the Easy settings
+  (the story clips are already rendered in their clip style). Editing a clip still renders it again.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Daha anlaşılır Kurulum, gereksiz render yok
+- **Kayıtlı anahtarlar kayıtlı görünür.** Kutularda "Saved ✓ (boş bırakırsan aynısı kalır)" ve
+  maskelenmiş bir ipucu yazar; kullanılan video depolamada yeşil "Saved · in use" etiketi olur.
+- **Gaming sayfasından eklenen bir videoyu Kütüphane'de açmak klipleri artık yeniden render etmez**
+  (hikâye klipleri kendi stilinde zaten hazır). Bir klibi düzenlersen yine yeniden üretilir.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Gespeicherte Schlüssel werden als gespeichert angezeigt. Ein Gaming-Video in der Bibliothek zu öffnen rendert seine Clips nicht mehr unnötig neu; das Bearbeiten eines Clips rendert ihn weiterhin neu.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- A mentett kulcsok mentettként jelennek meg. Egy Gaming-videó megnyitása a Könyvtárban már nem rendereli újra feleslegesen a klipeket; egy klip szerkesztése továbbra is újrarendereli.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Сохранённые ключи отображаются как сохранённые. Открытие видео со страницы Gaming в библиотеке больше не перерендеривает клипы без нужды; редактирование клипа по-прежнему рендерит его заново.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- تظهر المفاتيح المحفوظة على أنها محفوظة. فتح فيديو من صفحة Gaming في المكتبة لم يعد يعيد عرض مقاطعه دون حاجة؛ وتعديل مقطع ما زال يعيد عرضه.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- 已保存的密钥会显示为“已保存”，输入框里会提示“留空即保持不变”，正在使用的视频托管会有绿色“已保存 · 使用中”标记。从 Gaming 页面添加的视频在资料库中打开时，不再用 Easy 设置重新渲染全部剪辑（故事剪辑已按其风格渲染好）；编辑某个剪辑时仍会重新渲染。
+
+</details>
+
 ## [1.2.57] - 2026-11-19
 ### Cloudflare R2 for the Buffer videos
 - **Video hosting on Cloudflare R2 (recommended).** Buffer fetches every video from a public link

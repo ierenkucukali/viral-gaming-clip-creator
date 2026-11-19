@@ -218,6 +218,10 @@ def _ensure_renders(project: Project, auto: bool, only: str | None, explicit: bo
     hl = _hl(project)
     if not hl.get("candidates"):
         return []
+    if not explicit and hl.get("stories") and project.load_meta().get("clip_style"):
+        # local fork: a Gaming-page project renders its story clips itself (its clip style); opening it
+        # in the Library must not re-render them all with the Easy settings (an edit still does)
+        return []
     review = state.load_review(project, hl)
     data = E.load(project)
     top = _top(project, data, hl, review)

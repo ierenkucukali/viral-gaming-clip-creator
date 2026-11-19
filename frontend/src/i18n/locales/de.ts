@@ -3019,7 +3019,7 @@ const de: Record<string, string> = {
   "gx.ai_fallback_on": "If it can't be reached (limit, no internet, key), the local AI takes over.",
   "gx.ai_fallback_off": "No fallback: if the cloud AI fails, the analysis stops.",
   "buf.setup_title": "Buffer (posts to Instagram, TikTok, YouTube)",
-  "buf.setup_hint": "You send clips to Buffer when this app is open; Buffer posts them at their times, also while this PC is off. Buffer needs each video at a public link, so every clip is uploaded to your own free Cloudinary account and deleted there after it was posted (checked the next time you open the app).",
+  "buf.setup_hint": "You send clips to Buffer when this app is open; Buffer posts them at their times, also while this PC is off. Buffer needs each video at a public link, so every clip is uploaded to your video hosting (Cloudflare R2) and deleted there after it was posted. Saved keys are never shown again: the boxes stay empty, \"Saved\" means they are stored on this PC.",
   "buf.key_title": "Buffer API key",
   "buf.key_hint": "publish.buffer.com > Settings > API > Create key. Connect Instagram (Business or Creator), TikTok and YouTube in Buffer first.",
   "buf.key": "API key",
@@ -3114,7 +3114,7 @@ const de: Record<string, string> = {
   "gx.min_score": "Skip stories the AI scores below",
   "gx.story_package": "Also write extra titles + description per clip (3 more AI calls a clip; the story headline is already there)",
   "gx.count_hint": "Automatic: the AI lists every story that works on its own, up to the number per hour (a very lively stream gives about 30 an hour, a calm one far fewer), and drops what it scores as boring. Each clip runs from the setup to the payoff, between the min and max length; only the strongest stories may use the max.",
-  "buf.plan_where": "How many a day, at what times and in which jobs: Schedule tab > Posting plan.",
+  "buf.plan_where": "How many a day and at what times: Schedule tab > Posting plan.",
   "buf.start": "Start",
   "buf.start_asap": "After the posts in Buffer",
   "buf.start_at": "From a date and time",
@@ -3165,6 +3165,9 @@ const de: Record<string, string> = {
   "buf.r2_bucket": "Bucket name",
   "buf.r2_public": "Public address (r2.dev)",
   "buf.alternative": "alternative",
+  "buf.saved": "Saved",
+  "buf.in_use": "in use",
+  "buf.saved_keep": "Saved ✓ (leave empty to keep it)",
 };
 
 export default de;
