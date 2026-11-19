@@ -30,6 +30,7 @@ LOCAL_WINDOW_S = 600.0  # local model: 10 minutes of transcript per request
 LOCAL_OVERLAP_S = 120.0
 CLOUD_WINDOW_CHARS = 380_000  # ~95k tokens; above that the transcript is split into parts
 CLOUD_OVERLAP_S = 300.0
+CLOUD_MAX_SPAN_S = 3600.0  # one cloud request reads at most 1 hour (so it can list ~30 stories well)
 TAIL_S = 0.8  # after the last word of the payoff (the laugh / "NOOO" keeps going a moment)
 
 SYSTEM = (
@@ -42,20 +43,44 @@ SYSTEM = (
 )
 
 
+AUTO_MAX = 1000  # "auto": no fixed number, the AI returns every story that works
+PER_HOUR_DEFAULT = 30  # the most clip-worthy stories a very lively hour gives (one every 2 minutes)
+MIN_SCORE_DEFAULT = 50  # below this the AI itself says "boring": dropped
+
+
 def settings() -> dict:
-    """Story length = the gaming clip shape (Gaming page: shortest / target / longest);
-    how many = candidate_count (empty: story_count, default 15)."""
+    """Story length = the gaming clip shape (Gaming page: shortest / target / longest).
+    How many: automatic by default (the AI returns every story that works, up to `per_hour` an hour
+    of video); candidate_count (Gaming page) sets a fixed maximum per video instead."""
     from .highlights.modes import get_mode
 
     p = get_mode("gaming")
     lo = min(max(float(p.clip_min), 15.0), 170.0)
     hi = max(lo + 10.0, min(float(p.clip_max), 180.0))
     try:
-        count = int(config.get("candidate_count") or config.get("story_count") or 15)
+        fixed = int(config.get("candidate_count") or 0)
     except (TypeError, ValueError):
-        count = 15
+        fixed = 0
+    try:
+        per_hour = int(config.get("story_per_hour") or PER_HOUR_DEFAULT)
+    except (TypeError, ValueError):
+        per_hour = PER_HOUR_DEFAULT
+    try:
+        min_score = int(config.get("story_min_score") if config.get("story_min_score") is not None else MIN_SCORE_DEFAULT)
+    except (TypeError, ValueError):
+        min_score = MIN_SCORE_DEFAULT
     return {"enabled": config.get("story_clips") is not False, "min": lo, "max": hi,
-            "ideal": min(hi, max(lo, float(p.clip_ideal))), "count": min(max(count, 1), 60)}
+            "ideal": min(hi, max(lo, float(p.clip_ideal))),
+            "auto": fixed <= 0, "count": min(max(fixed, 1), AUTO_MAX) if fixed > 0 else AUTO_MAX,
+            "per_hour": min(max(per_hour, 2), 60), "min_score": min(max(min_score, 0), 90)}
+
+
+def want_for(span_min: float, cloud: bool, st: dict) -> int:
+    """How many stories one request may return (the AI returns fewer when there aren't more)."""
+    n = int(-(-span_min * st["per_hour"] // 60))  # ceil
+    return max(3, min(60, n)) if cloud else max(2, min(8, n))
+
+
 
 
 def schema(max_items: int) -> dict:
@@ -155,9 +180,10 @@ def windows(lines: list[dict], cloud: bool) -> list[tuple[int, int]]:
         return []
     if cloud:
         total = sum(len(x["text"]) + 24 for x in lines)
-        if total <= CLOUD_WINDOW_CHARS:
+        length = lines[-1]["end"] - lines[0]["start"]
+        if total <= CLOUD_WINDOW_CHARS and length <= CLOUD_MAX_SPAN_S * 1.1:
             return [(0, len(lines))]
-        span = (lines[-1]["end"] - lines[0]["start"]) * CLOUD_WINDOW_CHARS / total
+        span = min(length * CLOUD_WINDOW_CHARS / total, CLOUD_MAX_SPAN_S)
         overlap = CLOUD_OVERLAP_S
     else:
         span, overlap = LOCAL_WINDOW_S, LOCAL_OVERLAP_S
@@ -193,8 +219,11 @@ streamer pressed a clip button.
 TRANSCRIPT (lines L{a}..L{b - 1}):
 {text}
 
-TASK: find the best story clips in this transcript, at most {want}. Only moments that are genuinely funny,
-exciting, surprising, emotional or skillful. Return fewer (or none) rather than padding with boring talk.
+TASK: find EVERY story in this transcript that works as its own viral short clip: funny, exciting,
+surprising, emotional, skillful, rage, fails, weird NPC moments, good banter. More good clips = better,
+so don't stop at the few best ones: list all of them, up to {want} (a very lively stream gives about one
+every 2 minutes; a calm one far fewer). But each one must really work for a stranger on its own: never
+pad with boring talk, never invent events, and give an honest score (a weak one gets a low score).
 Rules for every story:
 - It is a complete mini story: setup -> build-up -> peak -> reaction/payoff.
 - start_line: the line where a viewer who knows nothing has to start to understand the peak (what they are
@@ -325,18 +354,20 @@ def find(project: Project, result: dict, model, *, on_progress=None) -> list[dic
     t0 = time.perf_counter()
     for k, (a, b) in enumerate(parts):
         span_min = (lines[b - 1]["end"] - lines[a]["start"]) / 60
-        want = max(3, min(40, int(round(span_min / 60 * 6 + 2)))) if cloud else max(2, min(6, int(span_min / 3)))
+        want = want_for(span_min, cloud, st)
         part = (f"This is part {k + 1} of {len(parts)} of the video ({mmss(lines[a]['start'])}-{mmss(lines[b - 1]['end'])})."
                 if len(parts) > 1 else f"Whole video ({mmss(duration)}).")
         hard, soft = _checker(a, b, lines, st)
         try:
             d = model.json(SYSTEM, _prompt(meta, annotated(lines, tags, a, b), a, b, st, want, part),
                            schema(want), temperature=0.4, check=hard, soft=soft, retries=2,
-                           num_predict=min(4000, 300 * want + 400))
+                           num_predict=min(16000, 260 * want + 600))
         except Exception as exc:  # noqa: BLE001 - one bad part must not lose the others
             console.print(f"[yellow]Story finder: part {k + 1}/{len(parts)} failed: {exc}[/]")
             continue
         for m in d.get("moments") or []:
+            if int(m["score"]) < st["min_score"]:
+                continue  # the AI itself rates it boring
             s, p, e = int(m["start_line"]), int(m["peak_line"]), int(m["end_line"])
             if not (a <= s <= p <= e < b):
                 continue
@@ -416,7 +447,7 @@ def apply(project: Project, result: dict, *, on_progress=None) -> bool:
         for c in result.get("candidates") or []:
             if all(_overlap(c, s) < 0.3 for s in stories) and c.get("quality") == "good":
                 extra.append({**c, "quality": "weak" if c.get("hype_score", 0) < 60 else c["quality"]})
-    cands = stories + extra[: max(0, settings()["count"] - len(stories))]
+    cands = stories + extra[: max(0, min(10, settings()["count"] - len(stories)))]
     for i, c in enumerate(cands):
         c["rank"], c["id"] = i + 1, f"c{i + 1:02d}"
     result["candidates"] = cands

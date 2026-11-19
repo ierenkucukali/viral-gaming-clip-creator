@@ -72,12 +72,12 @@ def measured() -> dict:
 
 
 def clips_for(minutes: float) -> int:
-    """About how many story clips the AI returns (storyfind: ~6 an hour + 2, capped by the count)."""
-    try:
-        cap = int(config.get("candidate_count") or config.get("story_count") or 15)
-    except (TypeError, ValueError):
-        cap = 15
-    return max(2, min(cap, round(minutes / 60 * 6 + 2)))
+    """About how many story clips come out: a lively stream gives up to `story_per_hour` an hour;
+    the estimate assumes 2/3 of that (the AI drops what doesn't work), capped by a fixed maximum."""
+    from . import storyfind
+
+    st = storyfind.settings()
+    return max(2, min(st["count"], round(minutes / 60 * st["per_hour"] * 2 / 3)))
 
 
 def plan(minutes: float, cloud: bool, streamer: bool, r: dict) -> dict:
@@ -88,7 +88,8 @@ def plan(minutes: float, cloud: bool, streamer: bool, r: dict) -> dict:
           "story": max(r["story_cloud_min_s"], minutes * r["story_cloud_s_per_min"]) if cloud
           else minutes * r["story_local_s_per_min"],
           "facecam": (r["facecam_s"] + n * r["facecam_s_per_clip"]) if streamer else 0.0,
-          "package": n * (r["package_cloud_s_per_clip"] if cloud else r["package_local_s_per_clip"]),
+          "package": (n * (r["package_cloud_s_per_clip"] if cloud else r["package_local_s_per_clip"])
+                      if config.get("story_package") is True else 0.0),
           "render": n * ideal * r["render_s_per_s"]}
     return {"minutes": minutes, "clips": n, "stages": {k: round(v) for k, v in st.items()},
             "total_s": round(sum(st.values())), "download_gb": round(minutes / 60 * GB_PER_HOUR_1080P60, 1)}

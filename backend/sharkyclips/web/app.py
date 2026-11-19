@@ -162,7 +162,11 @@ def submit_highlights(project_id: str, mode: str | None = None, force: bool = Fa
             submit_facecam(project_id, then=lambda _j: submit_auto_render(project_id))
         else:
             submit_auto_render(project_id)
-        if llm_available() and config.get("auto_analyze") is not False:
+        # local fork: the story finder already wrote the headline / title / why of every story clip,
+        # so the per-clip package (3 AI calls a clip) only runs when switched on (Gaming > Setup)
+        stories = bool((state.load_highlights(project) or {}).get("stories"))
+        if llm_available() and config.get("auto_analyze") is not False \
+                and (not stories or config.get("story_package") is True):
             submit_analyze(project_id)  # titles, viral score, ... (cached per clip)
 
     return jobs.submit("highlights", "gpu", project_id, {"mode": mode, "force": force}, run, then)

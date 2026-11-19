@@ -740,6 +740,9 @@ function TuningCard() {
   const [weak, setWeak] = useState(35);
   const [stories, setStories] = useState(true);
   const [perClip, setPerClip] = useState(true);
+  const [perHour, setPerHour] = useState(30);
+  const [minScore, setMinScore] = useState(50);
+  const [pkg, setPkg] = useState(false);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     req<Record<string, unknown>>("GET", "/api/gaming/settings").then((s) => {
@@ -749,12 +752,15 @@ function TuningCard() {
       setWeak(s.weak_score as number);
       setStories(s.story_clips !== false);
       setPerClip(s.facecam_per_clip !== false);
+      setPerHour((s.story_per_hour as number) ?? 30);
+      setMinScore((s.story_min_score as number) ?? 50);
+      setPkg(s.story_package === true);
     }).catch(() => undefined);
   }, []);
   if (!tun) return null;
   const save = async () => {
     await req("PUT", "/api/gaming/settings", { tuning: tun, candidate_count: count === "" ? null : count, daily_target: target, weak_score: weak,
-      story_clips: stories, facecam_per_clip: perClip });
+      story_clips: stories, facecam_per_clip: perClip, story_per_hour: perHour, story_min_score: minScore, story_package: pkg });
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
   };
@@ -776,10 +782,12 @@ function TuningCard() {
         {num(t("gaming.pre_max"), tun.pre_roll[1], (v) => setTun({ ...tun, pre_roll: [tun.pre_roll[0], v] }), 0, 30)}
         {num(t("gaming.min_gap"), tun.min_gap, (v) => setTun({ ...tun, min_gap: v }), 5, 600)}
         <label className="field" style={{ minWidth: 120 }}>
-          <span className="field-label">{t("gaming.count")}</span>
-          <input className="input input-sm" type="number" min={1} max={60} value={count} placeholder="auto"
+          <span className="field-label">{t("gx.count_fixed")}</span>
+          <input className="input input-sm" type="number" min={1} max={1000} value={count} placeholder={t("gx.auto")}
             onChange={(e) => setCount(e.target.value === "" ? "" : Number(e.target.value))} />
         </label>
+        {num(t("gx.per_hour"), perHour, setPerHour, 2, 60)}
+        {num(t("gx.min_score"), minScore, setMinScore, 0, 90)}
         {num(t("gaming.daily_target"), target, setTarget, 1, 60)}
         {num(t("gaming.weak_score"), weak, setWeak, 0, 100)}
       </div>
@@ -791,6 +799,11 @@ function TuningCard() {
         <input type="checkbox" checked={perClip} onChange={(e) => setPerClip(e.target.checked)} />
         <span>{t("gaming.facecam_per_clip")}</span>
       </label>
+      <label className="check" style={{ marginTop: 4, display: "flex", gap: 8, alignItems: "center" }}>
+        <input type="checkbox" checked={pkg} onChange={(e) => setPkg(e.target.checked)} />
+        <span>{t("gx.story_package")}</span>
+      </label>
+      <p className="muted small" style={{ marginTop: 8 }}>{t("gx.count_hint")}</p>
       <button className="btn btn-primary" onClick={save} style={{ marginTop: 8 }}>{saved ? t("gaming.saved") : t("gaming.save")}</button>
     </section>
   );

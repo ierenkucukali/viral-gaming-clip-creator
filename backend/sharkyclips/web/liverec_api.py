@@ -432,7 +432,15 @@ def api_gaming_settings() -> dict:
             "story_clips": config.get("story_clips") is not False,
             "facecam_per_clip": config.get("facecam_per_clip") is not False,
             "clip_style": config.get("clip_style") or "streamer",
-            "direct_fit_bg": config.get("direct_fit_bg") or "black"}
+            "direct_fit_bg": config.get("direct_fit_bg") or "black",
+            "story_per_hour": _story()["per_hour"], "story_min_score": _story()["min_score"],
+            "story_package": config.get("story_package") is True}
+
+
+def _story() -> dict:
+    from .. import storyfind
+
+    return storyfind.settings()
 
 
 @router.put("/api/gaming/settings")
@@ -448,12 +456,16 @@ def api_gaming_settings_put(body: dict) -> dict:
         changes["mode_tuning"] = mt
     if "candidate_count" in body:
         v = body["candidate_count"]
-        changes["candidate_count"] = None if v in (None, "") else int(min(max(int(v), 1), 60))
+        changes["candidate_count"] = None if v in (None, "", 0) else int(min(max(int(v), 1), 1000))
     if body.get("daily_target") is not None:
         changes["daily_target"] = int(min(max(int(body["daily_target"]), 1), 60))
     if body.get("weak_score") is not None:
         changes["weak_score"] = int(min(max(int(body["weak_score"]), 0), 100))
-    for k in ("story_clips", "facecam_per_clip"):
+    if body.get("story_per_hour") is not None:
+        changes["story_per_hour"] = int(min(max(int(body["story_per_hour"]), 2), 60))
+    if body.get("story_min_score") is not None:
+        changes["story_min_score"] = int(min(max(int(body["story_min_score"]), 0), 90))
+    for k in ("story_clips", "facecam_per_clip", "story_package"):
         if k in body:
             changes[k] = bool(body[k])
     if body.get("clip_style") in ("streamer", "direct"):

@@ -7,6 +7,65 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.54] - 2026-11-19
+### As many clips as the stream gives
+- **The number of clips is automatic.** The AI now lists every story in the stream that works as its
+  own clip (funny, rage, fails, chases, NPC talks, banter...), not just the best few: up to 30 an hour
+  of video by default (a calm stream gives far fewer), so a 10-hour stream can give hundreds of clips.
+  Stories the AI itself scores as boring are dropped. Setup > Clip shape: "Most clips per hour",
+  "Skip stories the AI scores below" and an optional fixed maximum per video.
+- **Long streams are read in 1-hour parts** with the cloud AI, so every hour gets a full, careful list.
+- **Faster and cheaper:** the story finder already writes the headline, title and description, so
+  the extra per-clip title step is off for story clips (switch in Setup).
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Yayın ne kadar veriyorsa o kadar klip
+- **Klip sayısı otomatik.** Yapay zekâ artık en iyi birkaç anı değil, tek başına klip olabilecek her
+  hikâyeyi listeler: varsayılan olarak videonun saati başına en fazla 30 (sakin bir yayın çok daha
+  az verir); 10 saatlik bir yayından yüzlerce klip çıkabilir. Yapay zekânın sıkıcı bulduğu anlar
+  atılır. Kurulum > Klip şekli: "Saat başına en fazla klip", "Şu puanın altını atla" ve isteğe bağlı
+  video başına sabit üst sınır.
+- **Uzun yayınlar 1 saatlik parçalarla okunur**, her saat dikkatlice taranır.
+- **Daha hızlı ve ucuz:** hikâye bulucu başlığı ve açıklamayı zaten yazıyor; klip başına ek başlık
+  adımı hikâye kliplerinde kapalı (Kurulum'dan açılabilir).
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Die Anzahl der Clips ist automatisch: die KI listet jede Story, die als eigener Clip funktioniert (Standard bis 30 pro Stunde Video). Lange Streams werden in 1-Stunden-Teilen gelesen.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- A klipek száma automatikus: az MI minden önálló klipként működő történetet felsorol (alapból óránként legfeljebb 30). A hosszú streameket 1 órás részekben olvassa.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Количество клипов определяется автоматически: ИИ перечисляет каждую историю, которая работает как отдельный клип (по умолчанию до 30 в час видео). Длинные стримы читаются частями по 1 часу.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- عدد المقاطع تلقائي: يسرد الذكاء الاصطناعي كل قصة تصلح مقطعًا مستقلًا (افتراضيًا حتى 30 لكل ساعة فيديو). تُقرأ البثوث الطويلة على أجزاء من ساعة.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- 剪辑数量自动决定：AI 会列出每个能单独成片的故事（默认每小时视频最多 30 个）。长直播按 1 小时分段读取。
+
+</details>
+
 ## [1.2.53] - 2026-11-19
 ### The gaming clipper, ready to use (local build)
 - **One page, four steps.** Gaming page: **Make clips** (drop a video or paste a YouTube link, pick

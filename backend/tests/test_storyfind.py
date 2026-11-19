@@ -33,9 +33,20 @@ def test_local_windows_overlap_and_cover_everything():
     assert all(lines[b - 1]["end"] - lines[a]["start"] <= storyfind.LOCAL_WINDOW_S + 6 for a, b in parts)
 
 
-def test_cloud_reads_a_long_stream_in_one_request():
-    lines = _lines(3000)  # 5 hours of short lines
-    assert storyfind.windows(lines, cloud=True) == [(0, 3000)]
+def test_cloud_reads_up_to_an_hour_per_request():
+    lines = _lines(600)  # 1 hour of short lines: one request
+    assert storyfind.windows(lines, cloud=True) == [(0, 600)]
+    parts = storyfind.windows(_lines(3000), cloud=True)  # 5 hours: about one request an hour, overlapping
+    assert 5 <= len(parts) <= 7 and parts[0][0] == 0 and parts[-1][1] == 3000
+    assert all(b > a2 for (_a, b), (a2, _b) in zip(parts, parts[1:]))
+
+
+def test_story_count_is_automatic_by_default():
+    st = storyfind.settings()
+    assert st["auto"] and st["count"] == storyfind.AUTO_MAX and st["per_hour"] == 30
+    assert storyfind.want_for(60, True, st) == 30  # a 1-hour request may list up to 30 stories
+    assert storyfind.want_for(600, True, st) == 60
+    assert storyfind.want_for(10, False, st) == 5  # local 10-minute windows
 
 
 def test_fit_keeps_the_peak_and_the_length_limits():
@@ -83,7 +94,8 @@ def _moment(s, p, e, score, headline="Cops had zero chance 🚔"):
 
 def test_find_returns_ranked_non_overlapping_stories(tmp_path, monkeypatch):
     monkeypatch.setattr(storyfind, "settings", lambda: {"enabled": True, "min": 45.0, "max": 120.0,
-                                                        "ideal": 85.0, "count": 15})
+                                                        "ideal": 85.0, "count": 15, "per_hour": 30,
+                                                        "min_score": 50})
     proj = FakeProject(tmp_path, 100)
     result = {"duration": 600.0, "curve": {"values": [0.1] * 600}, "candidates": [
         {"reasons": [{"code": "laughter", "t": 130.0, "strength": 0.9}]}]}
@@ -129,7 +141,8 @@ def test_apply_replaces_signal_candidates_and_keeps_strong_extras(tmp_path, monk
     monkeypatch.setattr(llm, "session", fake_session)
     monkeypatch.setattr(llmcloud, "active", lambda: llmcloud.Cloud("anthropic", "claude-opus-5-5", "k" * 30))
     monkeypatch.setattr(storyfind, "settings", lambda: {"enabled": True, "min": 45.0, "max": 120.0,
-                                                        "ideal": 85.0, "count": 15})
+                                                        "ideal": 85.0, "count": 15, "per_hour": 30,
+                                                        "min_score": 50})
     assert storyfind.apply(proj, result)
     cands = result["candidates"]
     assert cands[0]["story"]["score"] == 80 and cands[0]["id"] == "c01"

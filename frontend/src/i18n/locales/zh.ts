@@ -3049,6 +3049,12 @@ const zh: Record<string, string> = {
   "buf.state_cancelled": "cancelled",
   "gx.style_direct_short": "Direct (whole video)",
   "gx.style_streamer_short": "Streamer cam on top",
+  "gx.count_fixed": "Max clips per video (empty = automatic)",
+  "gx.auto": "auto",
+  "gx.per_hour": "Most clips per hour of video",
+  "gx.min_score": "Skip stories the AI scores below",
+  "gx.story_package": "Also write extra titles + description per clip (3 more AI calls a clip; the story headline is already there)",
+  "gx.count_hint": "Automatic: the AI lists every story that works on its own, up to the number per hour (a very lively stream gives about 30 an hour, a calm one far fewer), and drops what it scores as boring. Each clip runs from the setup to the payoff, between the min and max length; only the strongest stories may use the max.",
 };
 
 export default zh;
