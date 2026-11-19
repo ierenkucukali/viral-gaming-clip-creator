@@ -450,6 +450,12 @@ export default function ProjectPage({ id }: { id: string }) {
     profanity_captions: true, bleep_sound: "classic", swear_strict: "auto", bleep_visual: true, bleep_icon: true, speaker_colors: true, speaker_names: false,
     cuts: "off", zoom: "off", music: false, brand: false, loop: false, replay: "off", chat_bubbles: false, memes: "off",
   };
+  // local fork: an empty headline box means "each AI story clip shows its own headline" (the renderer does the same)
+  const storyHeadline = selected?.story?.headline ?? "";
+  const previewOptions: ClipOptions =
+    !options.banner && storyHeadline && options.hook && (options.banner_style ?? "ig") === "ig"
+      ? { ...options, banner: storyHeadline }
+      : options;
   const [voicesRev, setVoicesRev] = useState(0);
   const rejected = useMemo(() => new Set(review?.rejected ?? []), [review]);
   const edit: ClipEdit | undefined = selected ? review?.edits?.[selected.id] : undefined;
@@ -704,6 +710,12 @@ export default function ProjectPage({ id }: { id: string }) {
 
 
   const setOption = (o: Partial<ClipOptions>) => patchReview({ options: { ...options, ...o } });
+  // headline text: edited locally, saved on blur / Enter (the server trims spaces while you type)
+  const [bannerDraft, setBannerDraft] = useState<string | null>(null);
+  const commitBanner = () => {
+    if (bannerDraft !== null && bannerDraft.trim() !== (options.banner ?? "")) setOption({ banner: bannerDraft.trim() });
+    setBannerDraft(null);
+  };
 
   const setHook = (text: string) => {
     if (!selected || !review) return;
@@ -1101,7 +1113,7 @@ export default function ProjectPage({ id }: { id: string }) {
                         video={video}
                         clip={selected}
                         range={shownRange}
-                        options={options}
+                        options={previewOptions}
                         facecam={fc}
                         words={previewWords}
                         lang={project.language}
@@ -1401,6 +1413,79 @@ export default function ProjectPage({ id }: { id: string }) {
                       ))}
                     </select>
                   </div>
+                  {resolveLayout(options.layout, fc) === "fit" && (
+                    <div className="render-row">
+                      <label htmlFor="fit-bg">{t("fit.bg")}</label>
+                      <select
+                        id="fit-bg"
+                        className="select select-sm"
+                        value={options.fit_bg ?? "blur"}
+                        onChange={(e) => setOption({ fit_bg: e.target.value as "blur" | "black" })}
+                      >
+                        <option value="black">{t("fit.bg_black")}</option>
+                        <option value="blur">{t("fit.bg_blur")}</option>
+                      </select>
+                    </div>
+                  )}
+                  {resolveLayout(options.layout, fc) === "split" && (
+                    <div className="render-row split-controls" style={{ flexWrap: "wrap", gap: 8 }}>
+                      <label>{t("split.title")}</label>
+                      <Segmented<"top" | "bottom">
+                        value={options.split_order ?? "top"}
+                        options={[
+                          { value: "top", label: t("split.cam_top") },
+                          { value: "bottom", label: t("split.cam_bottom") },
+                        ]}
+                        onChange={(v) => setOption({ split_order: v })}
+                        label={t("split.title")}
+                      />
+                      <label htmlFor="split-ratio" className="muted small">
+                        {t("split.ratio")} {Math.round((options.split_ratio ?? 1 / 3) * 100)}%
+                      </label>
+                      <input
+                        id="split-ratio"
+                        type="range"
+                        min={25}
+                        max={40}
+                        step={1}
+                        value={Math.round((options.split_ratio ?? 1 / 3) * 100)}
+                        onChange={(e) => setOption({ split_ratio: Number(e.target.value) / 100 })}
+                      />
+                      <label htmlFor="game-fit" className="muted small">{t("split.game_fit")}</label>
+                      <select
+                        id="game-fit"
+                        className="select select-sm"
+                        value={options.game_fit ?? "crop"}
+                        onChange={(e) => setOption({ game_fit: e.target.value as "crop" | "blur" | "letterbox" })}
+                      >
+                        <option value="crop">{t("split.fit_crop")}</option>
+                        <option value="blur">{t("split.fit_blur")}</option>
+                        <option value="letterbox">{t("split.fit_letterbox")}</option>
+                      </select>
+                      {(options.game_fit ?? "crop") === "crop" && (
+                        <>
+                          <label htmlFor="game-offset" className="muted small">{t("split.offset")}</label>
+                          <input
+                            id="game-offset"
+                            type="range"
+                            min={-100}
+                            max={100}
+                            step={5}
+                            value={Math.round((options.game_offset ?? 0) * 100)}
+                            onChange={(e) => setOption({ game_offset: Number(e.target.value) / 100 })}
+                          />
+                        </>
+                      )}
+                      <label className="check small">
+                        <input
+                          type="checkbox"
+                          checked={options.hide_cam ?? true}
+                          onChange={(e) => setOption({ hide_cam: e.target.checked })}
+                        />
+                        {t("split.hide_cam")}
+                      </label>
+                    </div>
+                  )}
                   <div className="render-row">
                     <label>{t("render.hook")}</label>
                     <Segmented<HookMode>
@@ -1455,6 +1540,22 @@ export default function ProjectPage({ id }: { id: string }) {
                       <Icon name="sparkles" size={12} /> {t("render.flash")}: {t("render.flash_hint")}
                     </p>
                   )}
+                  <div className="render-row">
+                    <label htmlFor="banner-text">{t("easy2.banner")}</label>
+                    <input
+                      id="banner-text"
+                      className="input"
+                      style={{ height: 32, fontSize: 13 }}
+                      dir="auto"
+                      value={bannerDraft ?? options.banner ?? ""}
+                      maxLength={80}
+                      onChange={(e) => setBannerDraft(e.target.value)}
+                      onBlur={commitBanner}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
+                    />
+                  </div>
                   {subLangs.length > 0 && (
                     <div className="render-row">
                       <label htmlFor="sublang-sel">{t("render.sub_lang")}</label>
@@ -1765,7 +1866,7 @@ export default function ProjectPage({ id }: { id: string }) {
               video={video}
               clip={selected}
               range={shownRange}
-              options={options}
+              options={previewOptions}
               facecam={fc}
               words={previewWords}
               lang={project.language}

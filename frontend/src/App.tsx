@@ -35,6 +35,7 @@ const Trash = lazy(() => import("./pages/Trash"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Approve = lazy(() => import("./pages/Approve"));
 import { href, useRoute } from "./router";
+import Gaming from "./pages/Gaming";
 import { useTheme } from "./theme";
 
 /** Easy mode: three places, the Pro switch, language and theme. Nothing else. */
@@ -60,6 +61,9 @@ function EasyTopBar() {
         </a>
         <a href={href.pubqueue} aria-current={route.name === "pubqueue" ? "page" : undefined}>
           {t("nav.pubqueue")}
+        </a>
+        <a href={href.gaming} aria-current={route.name === "gaming" ? "page" : undefined}>
+          {t("nav.gaming")}
         </a>
         <a href={href.settings} aria-current={route.name === "settings" || route.name === "trash" ? "page" : undefined}>
           {t("nav.settings")}
@@ -138,6 +142,9 @@ function TopBar() {
         </a>
         <a href={href.studio()} aria-current={route.name === "studio" ? "page" : undefined}>
           {t("nav.studio")}
+        </a>
+        <a href={href.gaming} aria-current={route.name === "gaming" ? "page" : undefined}>
+          {t("nav.gaming")}
         </a>
         <a href={href.settings} aria-current={route.name === "settings" || route.name === "trash" ? "page" : undefined}>
           {t("nav.settings")}
@@ -276,6 +283,7 @@ export default function App() {
         {route.name === "publish" && (easy ? <EasyLibrary /> : <ClipLibrary view={route.view} />)}
         {route.name === "pubqueue" && <PublishQueue />}
         {route.name === "trash" && <Trash />}
+        {route.name === "gaming" && <Gaming />}
         </Suspense>
       </div>
       <Footer onWhatsNew={() => setManualWhatsNew(true)} />

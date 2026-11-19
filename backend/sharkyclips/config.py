@@ -24,6 +24,30 @@ DEFAULTS: dict[str, Any] = {
     "ui_language": languages.DEFAULT_UI_LANGUAGE,
     "output_language": languages.DEFAULT_OUTPUT_LANGUAGE,
     "default_mode": "gaming",
+    # local gaming fork: clip shape per mode (highlights/modes.py tuned), candidate count, daily target
+    "mode_tuning": {"gaming": {"clip_min": 30, "clip_ideal": 55, "clip_max": 120, "pre_roll": [8, 20], "min_gap": 60}},
+    # Story clips (storyfind.py): the AI reads the whole transcript and picks setup -> peak -> payoff
+    "story_clips": True,
+    "story_min": 30, "story_ideal": 55, "story_max": 120,  # seconds (Reels data: 45-60 s works best)
+    "story_count": 15,  # stories per video (1..60)
+    "story_keep_signal": True,  # strong signal moments the AI skipped stay as extra candidates
+    # Clip style for new imports (clipstyle.py): "streamer" (cam on top, gameplay below) | "direct"
+    # (no picture analysis: the whole 16:9 video centred in 9:16, headline above it)
+    "clip_style": "streamer",
+    "direct_fit_bg": "black",  # direct style background: black | blur
+    # AI provider (llmcloud.py): "ollama" (local, default) | "anthropic" (Claude API) | "gemini";
+    # keys live encrypted in <settings>/ai_keys.sec, never here
+    "llm_provider": "ollama",
+    "llm_cloud_models": {},  # {"anthropic": "claude-opus-5-5", "gemini": "auto"}
+    "llm_cloud_fallback": True,  # quota used up / no network -> the local model takes over
+    "llm_cloud_effort": "medium",  # Claude effort: low | medium | high
+    # ---- local fork: auto-post (autopost.py), off by default --------------------------------
+    # {"enabled": bool, "platforms": {"youtube"|"tiktok"|"reels": {"enabled": bool, "per_day": 1..3}},
+    #  "times": ["12:00", "18:00", "21:00"], "min_score": 55, "days_ahead": 2, "tiktok_consent": bool}
+    "autopost": {},
+    "candidate_count": None,  # None = ~1 per 4 min (3..40); else 1..60
+    "daily_target": 12,  # how many publishable clips you want per day (10-15); never auto-filled with weak ones
+    "weak_score": 35,  # candidates under this relative hype score (or without a real reason) are labelled weak
     "transcribe_language": "auto",
     "transcribe_model": "auto",
     "download_max_height": 1080,

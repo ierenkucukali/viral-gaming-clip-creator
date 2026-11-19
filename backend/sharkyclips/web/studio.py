@@ -60,7 +60,8 @@ def api_plan(project_id: str, cid: str, body: dict | None = None) -> dict:
     if body.get("frame") != "wide":
         fc = body["facecam"] if "facecam" in body else review.get("facecam")
         w, h = _source_size(project)
-        out["geometry"] = clips_mod.preview_geometry(opts.layout, w, h, Facecam.from_dict(fc))
+        out["geometry"] = clips_mod.preview_geometry(opts.layout, w, h, Facecam.from_dict(fc),
+                                                     clips_mod.SplitSpec.from_options(opts))
         out["safe_zones"] = safe_zones()
         if body.get("samples"):  # the render's zoom at these source times (preview check)
             lay = out["geometry"]["layout"]

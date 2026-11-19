@@ -48,3 +48,9 @@ google_client.json
 client_secret*.json
 *.enc
 api_token
+tools/
+samples/
+
+# local fork: exported clips (videos) stay out of git
+exports/
+docs/evidence/ishowspeed_*

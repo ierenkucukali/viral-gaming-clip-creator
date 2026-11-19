@@ -269,6 +269,8 @@ export interface Candidate {
   chat?: ChatStats | null;
   /** marked by hand (I/O) */
   manual?: boolean;
+  /** local fork: the AI story (setup -> peak -> payoff) and its Instagram-style headline */
+  story?: { type: string; score: number; headline: string; title: string; why: string } | null;
 }
 
 export type ProfanityMode = "auto" | "bleep" | "mute" | "off";
@@ -277,6 +279,18 @@ export type ZoomLevel = "off" | "subtle" | "strong";
 
 export interface ClipOptions {
   layout: Layout;
+  /** local gaming fork: split layout shape (clips.SplitSpec) */
+  split_order?: "top" | "bottom";
+  split_ratio?: number;
+  game_fit?: "crop" | "blur" | "letterbox";
+  game_offset?: number;
+  /** layout "fit" background: blurred copy or black bars (direct clip style) */
+  fit_bg?: "blur" | "black";
+  hide_cam?: boolean;
+  /** headline for the whole clip ("" = none); "ig" = Instagram-style white box on the split line
+   * (edit/headline.py), "brand" = the 1.2.34 box in the brand kit's colour */
+  banner?: string;
+  banner_style?: "ig" | "brand";
   subtitles: SubtitleStyle;
   hook: boolean;
   hook_flash: boolean;
@@ -1567,7 +1581,8 @@ export const api = {
   hype: (id: string) => req<HypeCurve>("GET", `${P(id)}/hype`),
   words: (id: string, start: number, end: number) =>
     req<Word[]>("GET", `${P(id)}/words?start=${start}&end=${end}`),
-  create: (body: { url?: string; path?: string; mode: Mode; language: string; full_upload?: boolean }) =>
+  create: (body: { url?: string; path?: string; mode: Mode; language: string; full_upload?: boolean;
+    clip_style?: "streamer" | "direct" }) =>
     req<Job>("POST", "/api/projects", body),
   transcribe: (id: string, language = "auto", force = false) =>
     req<Job>("POST", `${P(id)}/transcribe`, { language, force }),

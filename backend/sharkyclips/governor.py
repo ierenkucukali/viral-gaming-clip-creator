@@ -355,6 +355,8 @@ class Governor:
         # Ask the job manager BEFORE taking our lock: the job list takes its lock and then ours
         # (paused_total for the ETAs), so the other order would deadlock the whole server.
         idle = self.idle()
+        busy = self.busy()  # local fork: also outside our lock (the call below deadlocked a start
+        # that restored queued jobs: jobs lock -> paused_total vs our lock -> busy)
         with self._lock:
             cfg = self._cfg.get()
             if idle:
@@ -372,7 +374,6 @@ class Governor:
             if self._tick_n % 5 == 0:
                 self._scan_processes(cfg)
             self._tick_n += 1
-            busy = self.busy()
             ollama_ours = busy or any(p.pid in self._ours for p in self._ollama)
             ours = set(self._ours) | ({p.pid for p in self._ollama} if ollama_ours else set())
             s = self.monitor.sample(ours)
@@ -390,7 +391,7 @@ class Governor:
             row = s.to_dict()
             row["state"] = d.state
             self.history.append(row)
-            self._set_paused(d.paused and not self._stop.is_set())
+            self._set_paused(d.paused and not self._stop.is_set(), busy)
             self.rev += 1
             self.tick_seconds = time.perf_counter() - t0
         self.notify()
@@ -402,12 +403,12 @@ class Governor:
             except Exception:  # noqa: BLE001
                 pass
 
-    def _set_paused(self, paused: bool) -> None:
+    def _set_paused(self, paused: bool, busy: bool = False) -> None:
         if paused and self._go.is_set():
             self._go.clear()
             self._paused_since = time.monotonic()
             procs.suspend_all()
-            if self.busy():  # give the game the VRAM now, not at the job's next safe point
+            if busy:  # give the game the VRAM now, not at the job's next safe point
                 threading.Thread(target=_unload_llm, name="sharkyclips-llm-unload", daemon=True).start()
         elif not paused and not self._go.is_set():
             if self._paused_since:

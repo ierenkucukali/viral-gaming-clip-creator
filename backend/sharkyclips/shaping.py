@@ -69,6 +69,11 @@ def target(mode: str, cand: dict) -> dict:
 
     kind = content_kind(mode, cand)
     lo, hi = TARGETS[kind]
+    if cand.get("story"):  # local fork: an AI story clip (storyfind.py) keeps its story length
+        from . import storyfind
+
+        st = storyfind.settings()
+        return {"kind": kind, "min": st["min"], "max": st["max"], "source": "story"}
     out = {"kind": kind, "min": lo, "max": hi}
     ch = lengthfit.for_mode(mode)
     if ch:

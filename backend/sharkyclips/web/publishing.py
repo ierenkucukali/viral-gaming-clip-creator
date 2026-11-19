@@ -765,6 +765,14 @@ class Scheduler:
                 acts += autopilot.tick()
             except Exception:  # noqa: BLE001 - never stops the publish loop
                 pass
+            try:  # local fork: auto-post N clips a day per platform (autopost.py, off by default)
+                from .. import autopost
+
+                acts += autopost.tick(now)
+            except Exception:  # noqa: BLE001 - never stops the publish loop
+                from ..ui import console
+
+                console.print(f"[red]Auto-post:[/]\n{traceback.format_exc()}")
             self.last_tick = time.time()
             self.last_actions = acts
             return acts

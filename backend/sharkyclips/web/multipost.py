@@ -1709,6 +1709,42 @@ def _project(pid: str) -> Project:
     return _app().get_project(pid)
 
 
+# ===================================================================== auto-post (local fork)
+
+
+@router.get("/api/autopost")
+def api_autopost() -> dict:
+    from .. import autopost
+
+    return autopost.view()
+
+
+@router.put("/api/autopost")
+def api_autopost_put(body: dict) -> dict:
+    from .. import autopost
+
+    autopost.save_settings(body or {})
+    return autopost.view()
+
+
+@router.post("/api/autopost/run")
+def api_autopost_run() -> dict:
+    """Plan the free slots now (the publish loop also does it about once a minute)."""
+    from .. import autopost
+
+    acts = autopost.tick()
+    return {**autopost.view(), "actions": acts}
+
+
+@router.post("/api/autopost/resume/{platform}")
+def api_autopost_resume(platform: str) -> dict:
+    from .. import autopost
+
+    if platform not in autopost.PLATFORMS:
+        raise SharkyClipsError("Unknown platform.")
+    return autopost.resume(platform)
+
+
 @router.get("/api/publish/targets")
 def api_targets() -> dict:
     return {"targets": targets()}

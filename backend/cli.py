@@ -300,7 +300,14 @@ def cmd_render(args) -> int:
     if not chosen:
         raise SharkyClipsError("No clips selected.", "Pass ranks (e.g. 1 2 3), --accepted or --all.")
     opts = {**review["options"], **{k: v for k, v in {
-        "layout": args.layout, "subtitles": args.subs, "subtitle_lang": args.sub_lang}.items() if v}}
+        "layout": args.layout, "subtitles": args.subs, "subtitle_lang": args.sub_lang,
+        "split_order": args.cam_pos, "game_fit": args.game_fit}.items() if v}}
+    if args.cam_ratio is not None:
+        opts["split_ratio"] = args.cam_ratio
+    if args.game_offset is not None:
+        opts["game_offset"] = args.game_offset
+    if args.show_cam_twice:
+        opts["hide_cam"] = False
     if args.hook:
         opts["hook_flash"] = "flash" in args.hook
         opts["hook"] = "text" in args.hook
@@ -956,6 +963,11 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--accepted", action="store_true", help="the clips accepted in the web UI")
     r.add_argument("--all", action="store_true")
     r.add_argument("--layout", choices=["auto", "split", "fit", "crop"])
+    r.add_argument("--cam-pos", choices=["top", "bottom"], help="split: facecam above (top) or below the gameplay")
+    r.add_argument("--cam-ratio", type=float, help="split: facecam panel share of the height, 0.25-0.40")
+    r.add_argument("--game-fit", choices=["crop", "blur", "letterbox"], help="split: how gameplay fills its panel")
+    r.add_argument("--game-offset", type=float, help="split crop: centre shift -1 (left) .. 1 (right)")
+    r.add_argument("--show-cam-twice", action="store_true", help="don't blur the original cam in the gameplay")
     r.add_argument("--subs", choices=["bold", "clean", "minimal", "none"])
     r.add_argument("--sub-lang", choices=languages.codes(),
                    help="subtitle language (translated by `analyze --lang`)")
@@ -1008,4 +1020,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    if hasattr(__import__("signal"), "SIGUSR1"):  # local fork: `kill -USR1 <pid>` prints every thread's stack
+        import faulthandler
+        import signal
+
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
     sys.exit(main())

@@ -20,9 +20,35 @@ export type Rect = [number, number, number, number];
 
 const floorEven = (v: number) => Math.max(0, Math.floor(v / 2) * 2);
 
+/** Split layout shape (clips.SplitSpec): facecam panel height, panel order, gameplay fill. */
+export interface SplitShape {
+  camH: number;
+  order: "top" | "bottom";
+  gameFit: "crop" | "blur" | "letterbox";
+  gameOffset: number;
+  hideCam: boolean;
+}
+
+export const DEFAULT_SPLIT: SplitShape = { camH: SPLIT_TOP, order: "top", gameFit: "crop", gameOffset: 0, hideCam: false };
+
+/** clips.SplitSpec.from_options */
+export function splitFromOptions(o: {
+  split_order?: string; split_ratio?: number; game_fit?: string; game_offset?: number; hide_cam?: boolean;
+}): SplitShape {
+  const ratio = Math.min(Math.max(Number(o.split_ratio ?? 1 / 3), 0.25), 0.4);
+  return {
+    camH: Math.max(2, Math.round((OUT_H * ratio) / 2) * 2),
+    order: o.split_order === "bottom" ? "bottom" : "top",
+    gameFit: o.game_fit === "blur" || o.game_fit === "letterbox" ? o.game_fit : "crop",
+    gameOffset: Math.min(Math.max(Number(o.game_offset ?? 0), -1), 1),
+    hideCam: o.hide_cam ?? true,
+  };
+}
+
 /** Facecam panel + gameplay source crops (source pixels) of the split layout. */
-export function splitRects(srcW: number, srcH: number, fc: Facecam): { cam: Rect; game: Rect } {
-  const bottomH = OUT_H - SPLIT_TOP;
+export function splitRects(srcW: number, srcH: number, fc: Facecam, sp: SplitShape = DEFAULT_SPLIT): { cam: Rect; game: Rect } {
+  const camH = sp.camH;
+  const gameH = OUT_H - camH;
   const bx = Math.min(Math.max(0, fc.x), 0.95);
   const by = Math.min(Math.max(0, fc.y), 0.95);
   const bw = Math.min(Math.max(0.05, fc.w), 1 - bx);
@@ -31,7 +57,7 @@ export function splitRects(srcW: number, srcH: number, fc: Facecam): { cam: Rect
   let fy = by * srcH;
   let fw = bw * srcW;
   let fh = bh * srcH;
-  const target = OUT_W / SPLIT_TOP;
+  const target = OUT_W / camH;
   if (fw / fh > target) {
     const nw = fh * target;
     fx += (fw - nw) / 2;
@@ -45,17 +71,33 @@ export function splitRects(srcW: number, srcH: number, fc: Facecam): { cam: Rect
   fh = Math.min(fh, srcH);
   fx = Math.min(Math.max(0, fx), srcW - fw);
   fy = Math.min(Math.max(0, fy), srcH - fh);
-  const gw = Math.min(srcW, (srcH * OUT_W) / bottomH);
+  const cam: Rect = [floorEven(fx), floorEven(fy), floorEven(fw), floorEven(fh)];
+  if (sp.gameFit !== "crop") return { cam, game: [0, 0, floorEven(srcW), floorEven(srcH)] };
+  const gw = Math.min(srcW, (srcH * OUT_W) / gameH);
   let gx = (srcW - gw) / 2;
-  const camL = fc.x * srcW;
-  const camR = (fc.x + fc.w) * srcW;
-  if (camR <= srcW / 2 && camR > gx) gx = camR - gx < gw * 0.25 ? Math.min(camR, srcW - gw) : gx;
-  else if (camL >= srcW / 2 && camL < gx + gw) gx = gx + gw - camL < gw * 0.25 ? Math.max(camL - gw, 0) : gx;
+  if (sp.gameOffset) {
+    gx += (sp.gameOffset * (srcW - gw)) / 2;
+  } else {
+    const camL = fc.x * srcW;
+    const camR = (fc.x + fc.w) * srcW;
+    if (camR <= srcW / 2 && camR > gx) gx = camR - gx < gw * 0.25 ? Math.min(camR, srcW - gw) : gx;
+    else if (camL >= srcW / 2 && camL < gx + gw) gx = gx + gw - camL < gw * 0.25 ? Math.max(camL - gw, 0) : gx;
+  }
   gx = Math.min(Math.max(0, gx), srcW - gw);
-  return {
-    cam: [floorEven(fx), floorEven(fy), floorEven(fw), floorEven(fh)],
-    game: [floorEven(gx), 0, floorEven(gw), floorEven(srcH)],
-  };
+  return { cam, game: [floorEven(gx), 0, floorEven(gw), floorEven(srcH)] };
+}
+
+/** clips.cam_cover_rect: the original facecam inside the gameplay rect (game-rect pixels) or null. */
+export function camCoverRect(srcW: number, srcH: number, fc: Facecam, game: Rect): Rect | null {
+  const [gx, gy, gw, gh] = game;
+  const padX = 0.01 * srcW;
+  const padY = 0.01 * srcH;
+  const x0 = Math.max(gx, fc.x * srcW - padX);
+  const y0 = Math.max(gy, fc.y * srcH - padY);
+  const x1 = Math.min(gx + gw, (fc.x + fc.w) * srcW + padX);
+  const y1 = Math.min(gy + gh, (fc.y + fc.h) * srcH + padY);
+  if (x1 - x0 < 8 || y1 - y0 < 8) return null;
+  return [floorEven(x0 - gx), floorEven(y0 - gy), floorEven(x1 - x0), floorEven(y1 - y0)];
 }
 
 /** The renderer's "scale=WxH:force_original_aspect_ratio=increase,crop=WxH": centered crop of a

@@ -211,6 +211,15 @@ def banner_text(cand: dict, lang: str | None) -> str:
     """The AI's short punchy hook in the creator's style: CAPITALS + their emojis, no swears."""
     from .titles import style as style_mod
 
+    story = (cand.get("story") or {}).get("headline")
+    if story:  # local fork: the story finder's Instagram-style headline (already English, one emoji)
+        try:
+            from .titles import style as style_mod
+
+            text, _n = style_mod.censor(" ".join(story.split()), lang or "en")
+        except Exception:  # noqa: BLE001
+            text = " ".join(story.split())
+        return text[:80]
     pub = cand.get("publish") or {}
     titles = [t for t in pub.get("titles") or [] if t]
     lang = lang or pub.get("language") or "en"

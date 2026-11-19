@@ -35,6 +35,10 @@ from .render import Encoder, RenderResult, run_ffmpeg
 OUT_W, OUT_H = 1080, 1920
 SPLIT_TOP = 768  # facecam height in the split layout (40%)
 LAYOUTS = ("auto", "split", "fit", "crop")
+FIT_BGS = ("blur", "black")
+SPLIT_ORDERS = ("top", "bottom")
+GAME_FITS = ("crop", "blur", "letterbox")
+BANNER_STYLES = ("ig", "brand")
 SUBTITLE_STYLES = ("bold", "karaoke", "speakers", "clean", "minimal", "none")
 NO_SPACE_LANGS = {"zh", "ja"}
 FLASH_SECONDS = 1.0
@@ -81,8 +85,18 @@ class ClipOptions:
     # 1.2.34 Easy 2.0: slow parts (no talking, nothing happening) at 1.2x; a headline banner on top
     speedup: str = "off"  # off | auto
     banner: str = ""  # "" = none, else the headline text shown at the top for the whole clip
+    # local gaming fork: "ig" = Instagram-style white box, black text, colour emoji (edit/headline.py,
+    # a PNG on the split line); "brand" = the 1.2.34 ASS box in the brand kit's highlight colour
+    banner_style: str = "ig"
     safe_zone: str = ""  # "" = none | "shorts": captions / hook / banner stay clear of the Shorts buttons
     track: str = "off"  # off | auto: the full-height crop follows the action (edit/track.py)
+    # Local gaming fork: split layout controls (facecam_top / facecam_bottom)
+    split_order: str = "top"  # top = facecam above gameplay, bottom = facecam below gameplay
+    split_ratio: float = 1 / 3  # facecam panel share of the 1920 px height (0.25 - 0.40): 640 px
+    game_fit: str = "crop"  # crop (full-height crop) | blur (whole frame on blurred fill) | letterbox
+    game_offset: float = 0.0  # crop centre shift, -1 (left edge) .. 1 (right edge)
+    hide_cam: bool = True  # blur the original facecam overlay where it shows inside the gameplay pane
+    fit_bg: str = "blur"  # layout "fit": "blur" (blurred copy) | "black" (direct clip style, clipstyle.py)
 
     @classmethod
     def from_dict(cls, data: dict | None) -> "ClipOptions":
@@ -90,8 +104,15 @@ class ClipOptions:
         keys = ("layout", "subtitles", "hook", "hook_text", "hook_flash", "subtitle_lang", "profanity",
                 "profanity_captions", "bleep_sound", "swear_strict", "bleep_visual", "bleep_icon", "speaker_colors", "speaker_names", "cuts", "zoom",
                 "music", "brand", "loop", "replay", "chat_bubbles", "memes", "dub", "study_cards", "visualizer",
-                "speedup", "banner", "safe_zone", "track")
+                "speedup", "banner", "banner_style", "safe_zone", "track", "split_order", "split_ratio", "game_fit",
+                "game_offset", "hide_cam", "fit_bg")
         opts = cls(**{k: data[k] for k in keys if k in data})
+        try:
+            opts.split_ratio = min(max(float(opts.split_ratio), 0.25), 0.40)
+            opts.game_offset = min(max(float(opts.game_offset), -1.0), 1.0)
+        except (TypeError, ValueError) as exc:
+            raise SharkyClipsError("split_ratio / game_offset must be numbers.") from exc
+        opts.hide_cam = bool(opts.hide_cam)
         opts.chat_bubbles = bool(opts.chat_bubbles)
         opts.hook_flash = bool(opts.hook_flash)
         opts.profanity_captions = bool(opts.profanity_captions)
@@ -103,6 +124,7 @@ class ClipOptions:
                               ("memes", ("off", "light", "strong")),
                               ("study_cards", ("off", "auto")), ("visualizer", ("off", "auto")),
                               ("speedup", ("off", "auto")), ("safe_zone", ("", "shorts")), ("track", ("off", "auto")),
+                              ("split_order", SPLIT_ORDERS), ("game_fit", GAME_FITS),
                               ("bleep_sound", ("classic", "boop", "custom")),
                               ("swear_strict", ("auto", "normal", "strict", "paranoid"))):
             if getattr(opts, name) not in allowed:
@@ -124,6 +146,8 @@ class ClipOptions:
                                    f"Use one of: {', '.join(SUBTITLE_STYLES)}")
         opts.hook_text = str(opts.hook_text or "").strip()[:120]
         opts.banner = " ".join(str(opts.banner or "").split())[:80]
+        opts.banner_style = opts.banner_style if opts.banner_style in BANNER_STYLES else "ig"
+        opts.fit_bg = opts.fit_bg if opts.fit_bg in FIT_BGS else "blur"
         return opts
 
     def to_dict(self) -> dict:
@@ -153,6 +177,53 @@ class Facecam:
     def to_dict(self) -> dict:
         return {"x": round(self.x, 4), "y": round(self.y, 4), "w": round(self.w, 4),
                 "h": round(self.h, 4), "source": self.source, "confidence": self.confidence}
+
+
+@dataclass(frozen=True)
+class SplitSpec:
+    """Split layout shape (local gaming fork): facecam panel height, which panel is on top, how the
+    gameplay fills its panel. The default equals upstream SharkyClips (40 % facecam on top, crop)."""
+    cam_h: int = SPLIT_TOP
+    order: str = "top"
+    game_fit: str = "crop"
+    game_offset: float = 0.0
+    hide_cam: bool = False
+    fit_bg: str = "blur"  # layout "fit" background (not a split setting, but the same per-render shape)
+
+    @classmethod
+    def from_options(cls, opts: "ClipOptions") -> "SplitSpec":
+        cam_h = _even(OUT_H * min(max(float(opts.split_ratio), 0.25), 0.40))
+        return cls(cam_h, opts.split_order, opts.game_fit, float(opts.game_offset), bool(opts.hide_cam),
+                   opts.fit_bg if opts.fit_bg in FIT_BGS else "blur")
+
+    @property
+    def game_h(self) -> int:
+        return OUT_H - self.cam_h
+
+    @property
+    def cam_y(self) -> int:
+        return 0 if self.order == "top" else self.game_h
+
+    @property
+    def game_y(self) -> int:
+        return self.cam_h if self.order == "top" else 0
+
+    @property
+    def seam(self) -> int:
+        """y of the line between the two panels (captions / banner sit on it)."""
+        return self.cam_h if self.order == "top" else self.game_h
+
+
+# The split shape of the render in progress (set per render from ClipOptions, like _SQUARE / _TRACK).
+_SPLIT: contextvars.ContextVar[SplitSpec] = contextvars.ContextVar("sc_split", default=SplitSpec())  # noqa: B039 - frozen
+
+
+def split_spec() -> SplitSpec:
+    return _SPLIT.get()
+
+
+def split_seam() -> int:
+    return _SPLIT.get().seam
 
 
 @dataclass
@@ -202,7 +273,7 @@ class Geometry:
         if spec.frame == "wide":
             geo = cls(w, h, w // 2, h - 150 - bottom, 70 + top, 0.72, 120 + left, 120 + right)
         else:
-            cap = SPLIT_TOP if layout == "split" else 1390
+            cap = split_seam() if layout == "split" else 1390
             hook = 120 if layout != "fit" else 330
             # Two caption lines are ~210 px tall: the block's bottom must stay above the zone.
             if bottom and layout != "split":
@@ -227,8 +298,42 @@ def banner_y(geo: Geometry, layout: str) -> int:
     """Where the headline banner sits: on the line between facecam and gameplay (split), else at
     the top, below the app's own buttons."""
     if layout == "split":
-        return SPLIT_TOP - int(round(66 * geo.scale))
+        return split_seam() - int(round(66 * geo.scale))
     return geo.hook_y if geo.hook_y is not None else (120 if layout != "fit" else 330)
+
+
+def banner_caption_y(geo: Geometry) -> int:
+    """Split + headline: the captions leave the split line and go into the gameplay panel, clear
+    of the headline box (below the line when the facecam is on top, above it when it's below)."""
+    off = int(round(260 * geo.scale))
+    return split_seam() + off if split_spec().order == "top" else split_seam() - off
+
+
+def fit_video_top(layout: str, src_w: int, src_h: int, canvas: tuple[int, int]) -> int | None:
+    """Layout "fit" with a wider-than-canvas source: the y of the picture's top edge."""
+    W, H = canvas
+    if layout != "fit" or not src_w or not src_h or src_w / src_h <= W / H + 0.02:
+        return None
+    return (H - int(round(W * src_h / src_w))) // 2
+
+
+def headline_layer(opts: ClipOptions, geo: Geometry, layout: str, work: Path,
+                   video_top: int | None = None) -> dict | None:
+    """The Instagram-style headline (opts.banner_style "ig") as a PNG in the render folder:
+    {"file", "x", "y", "w", "h"} for the overlay, None when there is none. On the split layout the
+    box's vertical centre is the split line, else its top is the hook position (banner_y)."""
+    if not opts.banner or opts.banner_style != "ig":
+        return None
+    from .edit import headline
+
+    size = headline.render_png(opts.banner, geo.w, geo.scale, work / "headline.png")
+    if size is None:
+        return None
+    seam = split_seam() if layout == "split" else None
+    x, y = headline.position(size, geo.w, layout, seam, banner_y(geo, layout))
+    if video_top is not None:  # "fit": the box sits right above the picture (direct clip style)
+        y = max(int(round(40 * geo.scale)), video_top - size[1] - int(round(28 * geo.scale)))
+    return {"file": "headline.png", "x": x, "y": y, "w": size[0], "h": size[1]}
 
 
 def flash_from(peak: float, src_duration: float, src_fps: float) -> float:
@@ -388,7 +493,7 @@ def build_ass(words: list[dict], duration: float, opts: ClipOptions, layout: str
         black_c = ass_color(style.get("outline") or "#000000")
     rtl = languages.is_rtl(hook_lang or lang)
     # Caption line position (center of the text block)
-    cap_y = geo.cap_y if geo.cap_y is not None else (SPLIT_TOP if layout == "split" else 1390)
+    cap_y = geo.cap_y if geo.cap_y is not None else (split_seam() if layout == "split" else 1390)
 
     def sz(v: float) -> int:
         return max(1, int(round(v * geo.scale)))
@@ -537,7 +642,7 @@ def build_ass(words: list[dict], duration: float, opts: ClipOptions, layout: str
     if opts.bleep_icon and bleep_marks and opts.profanity != "off":
         # a "#@!" badge near the facecam (split: bottom-right of the camera panel)
         if layout == "split":
-            bx, by = geo.w - sz(120), (SPLIT_TOP if geo.cap_y is None else geo.cap_y) - sz(150)
+            bx, by = geo.w - sz(120), (split_seam() if geo.cap_y is None else geo.cap_y) - sz(150)
         else:
             bx, by = geo.w - sz(120), sz(260)
         for a, b in bleep_marks:
@@ -546,7 +651,9 @@ def build_ass(words: list[dict], duration: float, opts: ClipOptions, layout: str
             event(a, max(b, a + 0.35), "bleepicon",
                   f"{{\\an5\\pos({bx},{by})\\fscx60\\fscy60\\t(0,110,\\fscx112\\fscy112)"
                   f"\\t(110,200,\\fscx100\\fscy100)\\fad(40,120)}}#@!", layer=2)
-    if opts.banner:  # the headline stays on screen for the whole clip (it replaces the hook text)
+    if opts.banner and opts.banner_style == "ig":
+        pass  # the Instagram-style headline is a PNG laid over the picture (headline_layer); no hook text
+    elif opts.banner:  # the headline stays on screen for the whole clip (it replaces the hook text)
         text = _ass_escape(opts.banner)
         if rtl:
             text = "‫" + text + "‬"
@@ -607,17 +714,21 @@ def source_size(path, meta: dict) -> tuple[int, int, str]:
     return w, h, prefix
 
 
-def split_rects(src_w: int, src_h: int, facecam: Facecam) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
+def split_rects(src_w: int, src_h: int, facecam: Facecam, split: SplitSpec | None = None,
+                ) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
     """The split layout's source crops (x, y, w, h in source pixels): facecam panel, gameplay.
-    The renderer cuts exactly these; the live preview gets them too (preview_geometry)."""
-    bottom_h = OUT_H - SPLIT_TOP
+    The renderer cuts exactly these; the live preview gets them too (preview_geometry).
+    split: panel shape (None = the render's current one, see SplitSpec). In the "blur" /
+    "letterbox" gameplay modes the gameplay rect is the whole frame."""
+    sp = split or _SPLIT.get()
+    cam_h, game_h = sp.cam_h, sp.game_h
     # Facecam: cut the region (clamped inside the picture: a box from another video / resolution
-    # never reaches outside it), then center-crop it to the top panel's aspect ratio.
+    # never reaches outside it), then center-crop it to the panel's aspect ratio (never stretched).
     bx, by = min(max(0.0, facecam.x), 0.95), min(max(0.0, facecam.y), 0.95)
     bw, bh = min(max(0.05, facecam.w), 1.0 - bx), min(max(0.05, facecam.h), 1.0 - by)
     fx, fy = bx * src_w, by * src_h
     fw, fh = bw * src_w, bh * src_h
-    target = OUT_W / SPLIT_TOP
+    target = OUT_W / cam_h
     if fw / fh > target:  # too wide -> trim the sides
         nw = fh * target
         fx += (fw - nw) / 2
@@ -628,32 +739,59 @@ def split_rects(src_w: int, src_h: int, facecam: Facecam) -> tuple[tuple[int, in
         fh = nh
     fw, fh = min(fw, src_w), min(fh, src_h)
     fx, fy = min(max(0.0, fx), src_w - fw), min(max(0.0, fy), src_h - fh)
-    # Gameplay: full-height center crop to the bottom panel's aspect ratio, nudged away
-    # from the facecam so the camera doesn't show up twice.
-    gw = min(src_w, src_h * OUT_W / bottom_h)
+    cam_rect = (_floor_even(fx), _floor_even(fy), _floor_even(fw), _floor_even(fh))
+    if sp.game_fit != "crop":
+        return cam_rect, (0, 0, _floor_even(src_w), _floor_even(src_h))
+    # Gameplay: full-height crop to the gameplay panel's aspect ratio, shifted by game_offset,
+    # nudged away from the facecam so the camera doesn't show up twice (only without an offset).
+    gw = min(src_w, src_h * OUT_W / game_h)
     gx = (src_w - gw) / 2
-    cam_l, cam_r = facecam.x * src_w, (facecam.x + facecam.w) * src_w
-    if cam_r <= src_w / 2 and cam_r > gx:  # facecam on the left
-        gx = min(cam_r, src_w - gw) if cam_r - gx < gw * 0.25 else gx
-    elif cam_l >= src_w / 2 and cam_l < gx + gw:  # facecam on the right
-        gx = max(cam_l - gw, 0) if gx + gw - cam_l < gw * 0.25 else gx
+    if sp.game_offset:
+        gx += sp.game_offset * (src_w - gw) / 2
+    else:
+        cam_l, cam_r = facecam.x * src_w, (facecam.x + facecam.w) * src_w
+        if cam_r <= src_w / 2 and cam_r > gx:  # facecam on the left
+            gx = min(cam_r, src_w - gw) if cam_r - gx < gw * 0.25 else gx
+        elif cam_l >= src_w / 2 and cam_l < gx + gw:  # facecam on the right
+            gx = max(cam_l - gw, 0) if gx + gw - cam_l < gw * 0.25 else gx
     gx = min(max(0.0, gx), src_w - gw)
-    return ((_floor_even(fx), _floor_even(fy), _floor_even(fw), _floor_even(fh)),
-            (_floor_even(gx), 0, _floor_even(gw), _floor_even(src_h)))
+    return cam_rect, (_floor_even(gx), 0, _floor_even(gw), _floor_even(src_h))
 
 
-def preview_geometry(layout: str, src_w: int, src_h: int, facecam: Facecam | None) -> dict:
+def cam_cover_rect(src_w: int, src_h: int, facecam: Facecam, game: tuple[int, int, int, int]
+                   ) -> tuple[int, int, int, int] | None:
+    """The original facecam overlay inside the gameplay rect (game-rect pixels), slightly padded,
+    or None when it doesn't show there. hide_cam blurs this area so the cam isn't seen twice."""
+    gx, gy, gw, gh = game
+    pad_x, pad_y = 0.01 * src_w, 0.01 * src_h
+    x0 = max(gx, facecam.x * src_w - pad_x)
+    y0 = max(gy, facecam.y * src_h - pad_y)
+    x1 = min(gx + gw, (facecam.x + facecam.w) * src_w + pad_x)
+    y1 = min(gy + gh, (facecam.y + facecam.h) * src_h + pad_y)
+    if x1 - x0 < 8 or y1 - y0 < 8:
+        return None
+    return (_floor_even(x0 - gx), _floor_even(y0 - gy), _floor_even(x1 - x0), _floor_even(y1 - y0))
+
+
+def preview_geometry(layout: str, src_w: int, src_h: int, facecam: Facecam | None,
+                     split: SplitSpec | None = None) -> dict:
     """What the live preview needs to draw exactly what the renderer cuts (1.2.23): the
     resolved layout and, for split, the source rects as fractions of the source size."""
+    sp = split or _SPLIT.get()
     layout = resolve_layout(layout, facecam)
-    out: dict = {"layout": layout, "src": [src_w, src_h], "split_top": SPLIT_TOP, "out": [OUT_W, OUT_H]}
+    out: dict = {"layout": layout, "src": [src_w, src_h], "split_top": sp.cam_h, "out": [OUT_W, OUT_H],
+                 "split": {"cam_h": sp.cam_h, "order": sp.order, "game_fit": sp.game_fit,
+                           "game_offset": sp.game_offset, "hide_cam": sp.hide_cam,
+                           "cam_y": sp.cam_y, "game_y": sp.game_y}}
     if layout == "split" and facecam is not None:
-        cam, game = split_rects(src_w, src_h, facecam)
+        cam, game = split_rects(src_w, src_h, facecam, sp)
         out["cam"] = [round(cam[0] / src_w, 6), round(cam[1] / src_h, 6), round(cam[2] / src_w, 6), round(cam[3] / src_h, 6)]
         out["game"] = [round(game[0] / src_w, 6), round(game[1] / src_h, 6), round(game[2] / src_w, 6),
                        round(game[3] / src_h, 6)]
+        cover = cam_cover_rect(src_w, src_h, facecam, game) if sp.hide_cam else None
+        out["cover"] = None if cover is None else [round(cover[0] / src_w, 6), round(cover[1] / src_h, 6),
+                                                   round(cover[2] / src_w, 6), round(cover[3] / src_h, 6)]
     return out
-
 
 
 def picture_at(plan, layout: str, t: float) -> dict:
@@ -710,6 +848,9 @@ def _filter_graph(layout: str, src_w: int, src_h: int, facecam: Facecam | None,
         return f"[{inp}]{cover},setsar=1{add('full')}[{out}]"
     if layout == "fit" and abs(src_w / max(src_h, 1) - W / H) < 0.02:  # same shape: just scale
         return f"[{inp}]scale={W}:{H}:flags=bicubic,setsar=1{add('full')}[{out}]"
+    if layout == "fit" and _SPLIT.get().fit_bg == "black":  # direct clip style: plain black bars
+        return (f"[{inp}]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=bicubic{add('full')},"
+                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[{out}]")
     if layout == "fit":
         # Blur at quarter size (fast), then scale back up.
         bg = (f"scale={W // 4}:{H // 4}:force_original_aspect_ratio=increase,"
@@ -719,14 +860,36 @@ def _filter_graph(layout: str, src_w: int, src_h: int, facecam: Facecam | None,
         return (f"[{inp}]split=2[{a}][{b}];[{a}]{bg}[{bg_}];[{b}]{fg}[{fg_}];"
                 f"[{bg_}][{fg_}]overlay=(W-w)/2:(H-h)/2,setsar=1[{out}]")
     assert facecam is not None
-    bottom_h = OUT_H - SPLIT_TOP
-    (fx, fy, fw, fh), (gx, gy, gw, gh) = split_rects(src_w, src_h, facecam)
-    cam = f"crop={fw}:{fh}:{fx}:{fy},scale={OUT_W}:{SPLIT_TOP}:flags=bicubic"
-    game = (f"crop={gw}:{gh}:{gx}:{gy},"
-            f"scale={OUT_W}:{bottom_h}:force_original_aspect_ratio=increase:flags=bicubic,"
-            f"crop={OUT_W}:{bottom_h}")
-    return (f"[{inp}]split=2[{a}][{b}];[{a}]{cam}{add('cam')}[{cam_}];[{b}]{game}{add('game')}[{game_}];"
-            f"[{cam_}][{game_}]vstack=inputs=2,setsar=1[{out}]")
+    sp = _SPLIT.get()
+    game_h = sp.game_h
+    (fx, fy, fw, fh), (gx, gy, gw, gh) = split_rects(src_w, src_h, facecam, sp)
+    cam = f"crop={fw}:{fh}:{fx}:{fy},scale={OUT_W}:{sp.cam_h}:flags=bicubic"
+    gcrop = f"crop={gw}:{gh}:{gx}:{gy}"
+    cover = cam_cover_rect(src_w, src_h, facecam, (gx, gy, gw, gh)) if sp.hide_cam else None
+    hb, hc, hd = (f"{out}_{x}" for x in ("hb", "hc", "hd"))
+    pre = f"[{b}]{gcrop}"
+    if cover is not None:  # the original overlay inside the gameplay: cover it with a heavy blur of itself
+        cx, cy, cw, ch = cover
+        r = max(2, min(cw, ch) // 6)
+        pre = (f"[{b}]{gcrop},split=2[{hb}][{hc}];[{hc}]crop={cw}:{ch}:{cx}:{cy},boxblur={r}:3[{hd}];"
+               f"[{hb}][{hd}]overlay={cx}:{cy}")
+    if sp.game_fit == "crop":
+        game = (f"{pre},scale={OUT_W}:{game_h}:force_original_aspect_ratio=increase:flags=bicubic,"
+                f"crop={OUT_W}:{game_h}{add('game')}[{game_}]")
+    else:
+        gbg, gfg, gs1, gs2 = (f"{out}_{x}" for x in ("gbg", "gfg", "gs1", "gs2"))
+        if sp.game_fit == "blur":
+            bg = (f"[{gs1}]scale={OUT_W // 4}:{game_h // 4}:force_original_aspect_ratio=increase,"
+                  f"crop={OUT_W // 4}:{game_h // 4},boxblur=12:2,eq=brightness=-0.10:saturation=1.1,"
+                  f"scale={OUT_W}:{game_h}[{gbg}]")
+        else:  # letterbox: black bars
+            bg = f"[{gs1}]scale={OUT_W}:{game_h},drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill[{gbg}]"
+        game = (f"{pre},split=2[{gs1}][{gs2}];{bg};"
+                f"[{gs2}]scale={OUT_W}:{game_h}:force_original_aspect_ratio=decrease:flags=bicubic{add('game')}[{gfg}];"
+                f"[{gbg}][{gfg}]overlay=(W-w)/2:(H-h)/2[{game_}]")
+    order = f"[{cam_}][{game_}]" if sp.order == "top" else f"[{game_}][{cam_}]"
+    return (f"[{inp}]split=2[{a}][{b}];[{a}]{cam}{add('cam')}[{cam_}];{game};"
+            f"{order}vstack=inputs=2,setsar=1[{out}]")
 
 
 def speaker_names(project: Project) -> dict:
@@ -837,11 +1000,51 @@ def render_clip(project: Project, cand: dict, opts: ClipOptions, facecam: Faceca
     (at most twice), the report goes into res.info["bleep_report"]."""
     from .edit import bleepcheck
 
+    from . import clipstyle
+
+    direct = clipstyle.is_direct(project)
+    if direct:  # direct clip style: the whole 16:9 picture centred, no facecam, no picture analysis
+        opts, facecam = clipstyle.apply(opts, project), None
+    headline = (cand.get("story") or {}).get("headline")
+    if not opts.banner and headline and opts.banner_style == "ig" and opts.hook:
+        # local fork: every AI story clip gets its own headline (Pro mode renders many clips with one
+        # set of options); an empty banner box means "use the clip's headline"
+        opts = ClipOptions.from_dict({**opts.to_dict(), "banner": headline})
+    checked, fc_info = (None, None) if direct else clip_facecam(project, cand, opts, facecam)
+    changed = (checked.to_dict() if checked else None) != (facecam.to_dict() if facecam else None)
+    facecam = checked
     res = _render_once(project, cand, opts, facecam, dest, on_progress, spec)
+    if fc_info and changed:  # only when this clip's camera differs from the video's
+        res.info["facecam_clip"] = fc_info
     return bleepcheck.guarantee(
         project, cand, opts, spec or OutputSpec(), dest, res,
         lambda: _render_once(project, cand, opts, facecam, dest, on_progress, spec),
         lambda: bleep_plan(project, cand, opts, spec), on_stage)
+
+
+def clip_facecam(project: Project, cand: dict, opts: ClipOptions,
+                 facecam: Facecam | None) -> tuple[Facecam | None, dict | None]:
+    """Local fork: check the camera box inside this clip's own time range (facecam.for_window).
+    A box the user drew by hand ("manual") is always kept. Off with config facecam_per_clip=false."""
+    from . import config
+
+    if config.get("facecam_per_clip") is False or opts.layout not in ("split", "auto"):
+        return facecam, None
+    if facecam is not None and facecam.source == "manual":
+        return facecam, None
+    try:
+        from . import facecam as fc_mod
+
+        meta = project.load_meta()
+        info = fc_mod.for_window(project.source_path, float(cand["start"]), float(cand["end"]),
+                                 float(meta.get("duration") or 0), facecam.to_dict() if facecam else None,
+                                 project.cache_dir / "facecam" / "clips")
+    except Exception as exc:  # noqa: BLE001 - never block a render on the check
+        return facecam, {"why": f"check_failed: {exc}"}
+    box = Facecam.from_dict(info.get("box"))
+    if box is not None:
+        box.source = "auto" if info.get("why") == "video_box" else "clip"
+    return box, info
 
 
 def bleep_plan(project: Project, cand: dict, opts: ClipOptions, spec: OutputSpec | None = None):
@@ -888,7 +1091,17 @@ def _render_once(project: Project, cand: dict, opts: ClipOptions, facecam: Facec
 def _render_core(project: Project, cand: dict, opts: ClipOptions, facecam: Facecam | None,
                  dest: Path, on_progress: Callable[[float], None] | None = None,
                  spec: OutputSpec | None = None) -> RenderResult:
-    """The render itself (see render_clip)."""
+    """The render itself (see render_clip), with this clip's split shape (SplitSpec) in effect."""
+    token = _SPLIT.set(SplitSpec.from_options(opts))
+    try:
+        return _render_core_inner(project, cand, opts, facecam, dest, on_progress, spec)
+    finally:
+        _SPLIT.reset(token)
+
+
+def _render_core_inner(project: Project, cand: dict, opts: ClipOptions, facecam: Facecam | None,
+                       dest: Path, on_progress: Callable[[float], None] | None = None,
+                       spec: OutputSpec | None = None) -> RenderResult:
     from .render import cpu_fallback, pick_codec
 
     ffmpeg = require_tool("ffmpeg")
@@ -916,8 +1129,8 @@ def _render_core(project: Project, cand: dict, opts: ClipOptions, facecam: Facec
     # 16:9: the whole picture (fit), or filled (crop) - never the facecam split.
     layout = ("crop" if opts.layout == "crop" else "fit") if wide else resolve_layout(opts.layout, facecam)
     geo = Geometry.for_spec(spec, layout)
-    if opts.banner and layout == "split" and not wide:  # the banner sits on the split line: captions go below it
-        geo.cap_y = SPLIT_TOP + int(round(260 * geo.scale))
+    if opts.banner and layout == "split" and not wide:  # the banner sits on the split line: captions move off it
+        geo.cap_y = banner_caption_y(geo)
     _TRACK.set(None)
     track_keys: list = []
     if layout == "crop" and opts.track == "auto" and not wide:
@@ -962,6 +1175,15 @@ def _render_core(project: Project, cand: dict, opts: ClipOptions, facecam: Facec
         fade_out = max(0.0, total - 0.2)
         src = str(source.resolve())
         W, H = canvas
+        hl = headline_layer(opts, geo, layout, work, fit_video_top(layout, src_w, src_h, (geo.w, geo.h)))
+
+        def text_chain(pad: str, hl_i: int) -> str:
+            """Captions (ASS), then the headline box over the whole clip, then the final scale."""
+            if hl is None:
+                return f"[{pad}]ass=subs.ass{final},format=yuv420p[v]"
+            return (f"[{pad}]ass=subs.ass[tx];[{hl_i}:v]format=rgba[hlp];"
+                    f"[tx][hlp]overlay=x={hl['x']}:y={hl['y']}:enable='between(t,0,{total + 0.05:.3f})'"
+                    f"{final},format=yuv420p[v]")
         if flash:
             # [1] = flash (slight punch-in zoom), [0] = the clip, which starts with a white flash.
             punch = (f"scale={int(W * 1.08) // 2 * 2}:{int(H * 1.08) // 2 * 2},"
@@ -977,17 +1199,18 @@ def _render_core(project: Project, cand: dict, opts: ClipOptions, facecam: Facec
                           f"[ca]afade=t=out:st={fade_out:.3f}:d=0.2[a];")
             else:
                 graph += "[flv][mainv]concat=n=2:v=1:a=0[cv];"
-            graph += f"[cv]ass=subs.ass{final},format=yuv420p[v]"
+            graph += text_chain("cv", 2)
             inputs = ["-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", src,
                       "-ss", f"{flash_start:.3f}", "-t", f"{flash:.3f}", "-i", src]
             maps = ["-map", "[v]"] + (["-map", "[a]"] if has_audio else [])
             audio_filter: list[str] = []
         else:
-            graph = (_filter_graph(layout, src_w, src_h, facecam, size=canvas)
-                     + f";[base]ass=subs.ass{final},format=yuv420p[v]")
+            graph = _filter_graph(layout, src_w, src_h, facecam, size=canvas) + ";" + text_chain("base", 1)
             inputs = ["-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", src]
             maps = ["-map", "[v]"] + (["-map", "0:a:0?"] if has_audio else [])
             audio_filter = ["-af", f"afade=t=in:d=0.12,afade=t=out:st={fade_out:.3f}:d=0.2"] if has_audio else []
+        if hl is not None:  # one still frame; overlay repeats it (relative name: cwd = work)
+            inputs += ["-i", hl["file"]]
         if has_audio:
             acodec = ["-c:a", "libopus", "-b:a", f"{spec.audio_k}k"] if spec.audio == "opus" else \
                 ["-c:a", "aac", "-b:a", f"{spec.audio_k}k"]
@@ -1314,6 +1537,11 @@ def _render_planned(project: Project, cand: dict, opts: ClipOptions, facecam: Fa
                 inputs += ["-ss", seek_at(ins.src, fps), "-t", "0.4", "-i", src]
             fx_in.append(n_in)
             n_in += 1
+        hl = headline_layer(opts, geo, layout, work, fit_video_top(layout, src_w, src_h, (geo.w, geo.h)))
+        hl_i = None
+        if hl is not None:
+            inputs += ["-i", hl["file"]]
+            hl_i, n_in = n_in, n_in + 1
 
         g: list[str] = []
         sel = ""
@@ -1382,10 +1610,15 @@ def _render_planned(project: Project, cand: dict, opts: ClipOptions, facecam: Fa
             g.append(f"{main_pad}null[cv]")
         g.append("[cv]ass=subs.ass[sv]")
         last = "sv"
+        if hl is not None:  # the headline: same span as the ASS banner (after the intro card, main part)
+            g.append(f"[{hl_i}:v]format=rgba[hlp]")
+            g.append(f"[sv][hlp]overlay=x={hl['x']}:y={hl['y']}:"
+                     f"enable='between(t,{intro:.3f},{lead + main:.3f})'[hv]")
+            last = "hv"
         if logos:
             op = float(plan.brand["logo_opacity"])
             g.append(f"[{logos[0]}]scale={brand_info['w']}:{brand_info['h']},colorchannelmixer=aa={op:.2f}[wm]")
-            g.append(f"[sv][wm]overlay=x={brand_info['x']}:y={brand_info['y']}:"
+            g.append(f"[{last}][wm]overlay=x={brand_info['x']}:y={brand_info['y']}:"
                      f"enable='between(t,{lead:.3f},{lead + main:.3f})'[wv]")
             last = "wv"
         g.append(f"[{last}]null{final},format=yuv420p[v]")

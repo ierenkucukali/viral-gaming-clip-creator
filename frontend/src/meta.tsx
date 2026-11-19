@@ -19,8 +19,9 @@ export function MetaProvider({ children }: { children: ReactNode }) {
         } catch {
           /* ignore */
         }
-        // The config file wins unless this browser chose a language itself.
-        if (!explicit && s.ui_language && s.ui_language !== lang) setLang(s.ui_language);
+        // Local fork: the config file always wins (English on this PC); the language picker saves there too.
+        void explicit;
+        if (s.ui_language && s.ui_language !== lang) setLang(s.ui_language);
         if (s.ui_motion && s.ui_motion !== storedMotion()) applyMotion(s.ui_motion);
       })
       .catch(() => {});

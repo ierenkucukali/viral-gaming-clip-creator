@@ -153,8 +153,11 @@ def submit_highlights(project_id: str, mode: str | None = None, force: bool = Fa
         return {"candidates": len(res["candidates"]), "mode": res["mode"]}
 
     def then(_job: Job):
-        review = state.load_review(get_project(project_id))
-        if not review["facecam_checked"]:
+        from .. import clipstyle
+
+        project = get_project(project_id)
+        review = state.load_review(project)
+        if not review["facecam_checked"] and not clipstyle.is_direct(project):  # direct: no picture analysis
             submit_facecam(project_id)
         if llm_available() and config.get("auto_analyze") is not False:
             submit_analyze(project_id)  # titles, viral score, ... (cached per clip)
@@ -163,10 +166,11 @@ def submit_highlights(project_id: str, mode: str | None = None, force: bool = Fa
 
 
 def llm_available() -> bool:
-    from .. import llm
+    from .. import llm, llmcloud
 
-    return config.get("llm_enabled") is not False and (llm.ollama_exe() is not None
-                                                        or llm.server_version(0.3) is not None)
+    if config.get("llm_enabled") is False:
+        return False
+    return llmcloud.active() is not None or llm.ollama_exe() is not None or llm.server_version(0.3) is not None
 
 
 def submit_analyze(project_id: str, lang: str | None = None, force: bool = False,
@@ -261,6 +265,11 @@ def submit_import(source: str, mode: str, language: str, title: str,
             if cleanup is not None:
                 cleanup.unlink(missing_ok=True)  # the project keeps its own (hard-linked) copy
         job.project_id = project.id
+        from .. import clipstyle
+
+        # local fork: streamer cam + gameplay, or the direct (whole video centred) style; imports
+        # without a choice (Create clips page, phone, watch folder) use the Gaming page's selection
+        clipstyle.set_style(project, (extra or {}).get("clip_style") or clipstyle.default())
         return {"project_id": project.id}
 
     def then(job: Job):
@@ -1531,6 +1540,8 @@ def api_create(body: dict, request: Request) -> dict:
             raise SharkyClipsError(f"File not found: {source}")
     title = source if is_url(source) else Path(source).name
     extra = {"full_upload": bool(body["full_upload"])} if "full_upload" in body else None
+    if body.get("clip_style") in ("streamer", "direct"):  # local fork (Gaming page)
+        extra = {**(extra or {}), "clip_style": body["clip_style"]}
     return submit_import(source, mode, language, title, extra=extra).to_dict()
 
 
@@ -1628,7 +1639,7 @@ def api_project(project_id: str) -> dict:
         "is_rtl": languages.is_rtl(transcript_lang),
         "highlights": None if not hl else {
             "mode": hl.get("mode"), "created_at": hl.get("created_at"), "signals": signals,
-            "settings": hl.get("settings"), "candidates": cands},
+            "settings": hl.get("settings"), "candidates": cands, "summary": hl.get("summary")},
         "review": review,
         "clips": clips,
         "calibration": calibration.status(),
@@ -2508,6 +2519,7 @@ from .multipost import router as _multipost_router  # noqa: E402 - one Publish b
 from .pubqueue_api import router as _pubqueue_router  # noqa: E402 - publish queue for Claude in Chrome (1.2.40)
 from .trash_api import router as _trash_router  # noqa: E402 - delete + trash + disk usage (1.2.41)
 from .fullvideo_api import router as _fullvideo_router  # noqa: E402 - full video + Channel style (1.2.51)
+from .liverec_api import router as _liverec_router  # noqa: E402 - local fork: live recorder + export
 
 app.include_router(_auth_router)
 app.include_router(_studio_router)
@@ -2524,6 +2536,7 @@ app.include_router(_pubqueue_router)
 app.include_router(_platforms_router)
 app.include_router(_dub_router)
 app.include_router(_fullvideo_router)
+app.include_router(_liverec_router)
 
 
 @app.get("/api/{rest:path}")
@@ -2598,6 +2611,9 @@ def _start_publishing() -> None:
     from .live import install as install_live
 
     install_live()  # auto clips after a stream, live markers (1.2.17)
+    from .liverec_api import install as install_liverec
+
+    install_liverec()  # local fork: live recorder sessions (recover interrupted ones, analysis thread)
     from .phone_api import install as install_phone
 
     install_phone()  # the Telegram bot's Upload / Plan / Skip buttons (1.2.17)

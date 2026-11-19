@@ -401,6 +401,18 @@ def validate(value: Any, schema: dict, path: str = "$") -> list[str]:
 # ------------------------------------------------------------------ session
 
 
+def _loads_lenient(content: str):
+    """json.loads, but a JSON object wrapped in ```json fences or text is still found (small local
+    models sometimes add them). Raises json.JSONDecodeError like json.loads when nothing parses."""
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        a, b = content.find("{"), content.rfind("}")
+        if a >= 0 and b > a:
+            return json.loads(content[a:b + 1])
+        raise
+
+
 class LLM:
     """One loaded Ollama model. Use through `session()`."""
 
@@ -439,22 +451,12 @@ class LLM:
         for attempt in range(retries + 1):
             self._safe_point()
             t0 = time.perf_counter()
-            body = {"model": self.model, "messages": messages, "format": schema, "stream": False,
-                    "think": False, "keep_alive": BATCH_KEEP_ALIVE,
-                    "options": {"temperature": max(0.1, temperature - 0.15 * attempt),
-                                "num_ctx": self.num_ctx, "num_predict": num_predict, **self.placement}}
-            r = _http().post(f"{base_url()}/api/chat", json=body, timeout=600)
+            content = self._send(messages, schema, max(0.1, temperature - 0.15 * attempt), num_predict)
             self.calls += 1
             self.seconds += time.perf_counter() - t0
-            if not r.ok:
-                raise SharkyClipsError(f"Ollama error: {r.text[:300]}")
-            resp = r.json()
-            self.tokens_out += int(resp.get("eval_count") or 0)
-            self.gen_seconds += (resp.get("eval_duration") or 0) / 1e9
-            content = resp.get("message", {}).get("content", "")
             soft_errors: list[str] = []
             try:
-                data = json.loads(content)
+                data = _loads_lenient(content)
                 last_errors = validate(data, schema)
                 if not last_errors:
                     last_errors = check(data) if check else []
@@ -478,6 +480,33 @@ class LLM:
         raise SharkyClipsError(f"The LLM kept giving invalid answers: {'; '.join(last_errors[:5])}",
                                "Try again, or set a different `llm_model` in the config.")
 
+    def _send(self, messages: list[dict], schema: dict, temperature: float, num_predict: int) -> str:
+        """One request -> the answer text (the JSON). Cloud providers override this (llmcloud.py).
+
+        Local fork: Ollama 0.30 does not enforce `format` for every model (Qwen 3.5 answered with
+        other keys), so the schema is also written at the end of the last user message (the end,
+        so the shared prompt prefix stays cacheable)."""
+        messages = [dict(m) for m in messages]
+        for m in reversed(messages):
+            if m["role"] == "user":
+                m["content"] = (m["content"] + "\n\nAnswer with one JSON object that matches this JSON schema "
+                                "exactly (the same keys and types, every required key):\n"
+                                + json.dumps(schema, ensure_ascii=False, separators=(",", ":")))
+                break
+        body = {"model": self.model, "messages": messages, "format": schema, "stream": False,
+                "think": False, "keep_alive": BATCH_KEEP_ALIVE,
+                "options": {"temperature": temperature, "num_ctx": self.num_ctx, "num_predict": num_predict,
+                            **self.placement}}
+        r = _http().post(f"{base_url()}/api/chat", json=body, timeout=600)
+        if not r.ok:
+            raise SharkyClipsError(f"Ollama error: {r.text[:300]}")
+        resp = r.json()
+        self.tokens_out += int(resp.get("eval_count") or 0)
+        self.gen_seconds += (resp.get("eval_duration") or 0) / 1e9
+        if resp.get("done_reason") == "length":
+            self.truncated = getattr(self, "truncated", 0) + 1
+        return resp.get("message", {}).get("content", "")
+
 
     def _safe_point(self) -> None:
         """Before every request: wait while the governor pauses (with the model unloaded, so
@@ -487,6 +516,12 @@ class LLM:
 
         if governor.checkpoint(release=lambda: unload(self.model)):
             self.placement = placement(self.model, self.num_ctx)  # other apps may use more now
+        elif time.monotonic() - getattr(self, "_placed_at", 0.0) > 60:
+            # Local fork: the GPU budget changes with the PC's load and the performance mode; a model
+            # placed while the PC was busy stayed mostly on the CPU for the whole batch (very slow).
+            # Re-check at most once a minute; Ollama reloads only when the layer split changes.
+            self.placement = placement(self.model, self.num_ctx)
+        self._placed_at = time.monotonic()
         if self.auto and governor.prefer_small_llm() and self.model != fast_model():
             small = fast_model()
             if has_model(small):
@@ -546,8 +581,19 @@ def placement(name: str, num_ctx: int) -> dict:
 
 
 @contextmanager
-def session(model: str | None = None, auto: bool | None = None) -> Iterator[LLM]:
-    """Load the LLM as the only heavy model (Whisper is unloaded first); unload it afterwards."""
+def session(model: str | None = None, auto: bool | None = None, local: bool = False) -> Iterator[LLM]:
+    """Load the LLM as the only heavy model (Whisper is unloaded first); unload it afterwards.
+
+    Local fork: when the user picked a cloud provider (Claude API / Gemini, llmcloud.py) and saved
+    its key, that one answers instead (nothing is loaded on the GPU). local=True forces Ollama."""
+    if not local:
+        from . import llmcloud
+
+        cloud = llmcloud.active()
+        if cloud is not None:
+            with llmcloud.cloud_session(cloud) as c:
+                yield c
+            return
     ensure_server()
     name = model or choose_model()
     auto = model is None if auto is None else auto

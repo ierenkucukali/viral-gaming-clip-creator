@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from .. import __version__
+from .. import __version__, config
 from ..errors import SharkyClipsError
 from ..project import Project, write_json_atomic
 from .candidates import pick_candidates
@@ -50,7 +50,7 @@ def hype_curve_json(project: Project, ctx: AnalysisContext, hype, result: dict) 
 
 
 def run_highlights(project: Project, mode: str | None = None, top: int | None = None,
-                   force: bool = False, fetch_chat: bool = True) -> dict:
+                   force: bool = False, fetch_chat: bool = True, stories_wanted: bool = True) -> dict:
     """fetch_chat=False: don't download the chat replay here (the web UI does it in its
     downloads lane, so the GPU lane isn't blocked); an existing chat.json is still used."""
     meta = project.load_meta()
@@ -70,6 +70,11 @@ def run_highlights(project: Project, mode: str | None = None, top: int | None = 
     t0 = time.perf_counter()
     ctx = AnalysisContext(project, preset)
     hype = compute_hype(ctx)
+    if top is None and config.get("candidate_count"):
+        try:
+            top = int(min(max(int(config.get("candidate_count")), 1), 60))
+        except (TypeError, ValueError):
+            top = None
     cands = pick_candidates(ctx, hype, top)
     elapsed = time.perf_counter() - t0
 
@@ -100,21 +105,33 @@ def run_highlights(project: Project, mode: str | None = None, top: int | None = 
                 "reasons": c.reasons,
                 "signal_scores": c.signal_scores,
                 "text": c.text,
+                "quality": candidate_quality(c.hype_score, c.reasons, c.marker is not None),
                 **({"marked": {"source": c.marker.get("source"), "by": c.marker.get("by"), "t": c.peak}}
                    if c.marker is not None else {}),
             }
             for i, c in enumerate(cands)
         ],
+        "summary": quality_summary(cands),
         # Whole-video hype curve (1 value per second) for the UI timeline / later calibration.
         "curve": {"resolution_s": 1.0, "values": [round(float(v), 3) for v in hype.smoothed]},
     }
+    if preset.name == "gaming" and stories_wanted:
+        from .. import storyfind
+
+        if storyfind.apply(project, result):
+            result["summary"] = summary_of(result["candidates"])
+            meta_count = len(result["candidates"])
+        else:
+            meta_count = len(cands)
+    else:
+        meta_count = len(cands)
     path = project.dir / "highlights.json"
     carried = carry_over_ai(path, result)
     _keep_manual_clips(project, path, result)
     write_json_atomic(path, result)
     write_json_atomic(project.dir / "hype_curve.json", hype_curve_json(project, ctx, hype, result),
                       compact=True)
-    meta["highlights"] = {"file": path.name, "mode": preset.name, "count": len(cands)}
+    meta["highlights"] = {"file": path.name, "mode": preset.name, "count": meta_count}
     if carried:
         meta["analysis"] = {**(meta.get("analysis") or {}), "count": carried}
     else:
@@ -123,7 +140,46 @@ def run_highlights(project: Project, mode: str | None = None, top: int | None = 
     return result
 
 
-AI_FIELDS = ("publish", "llm", "translations")
+def candidate_quality(hype_score: int, reasons: list[dict], marked: bool = False) -> str:
+    """Local fork: "good" or "weak". Weak = low relative score or no reason that really fired
+    (strength >= 0.4). Weak candidates are shown but never used to fill the daily target."""
+    if marked:
+        return "good"
+    try:
+        floor = int(config.get("weak_score") or 35)
+    except (TypeError, ValueError):
+        floor = 35
+    strong = any(float(r.get("strength") or 0) >= 0.4 for r in reasons or [])
+    return "good" if hype_score >= floor and strong else "weak"
+
+
+def quality_summary(cands: list) -> dict:
+    """How many good candidates there are vs the daily target (config daily_target)."""
+    try:
+        target = int(config.get("daily_target") or 12)
+    except (TypeError, ValueError):
+        target = 12
+    good = sum(1 for c in cands if candidate_quality(c.hype_score, c.reasons, c.marker is not None) == "good")
+    return {"daily_target": target, "good": good, "weak": len(cands) - good, "enough": good >= target,
+            "note": None if good >= target else
+            f"Only {good} good candidates for a target of {target}: lower the weak threshold, mark moments "
+            f"by hand, or add more footage. Weak candidates are never used to fill the target."}
+
+
+def summary_of(cands: list[dict]) -> dict:
+    """quality_summary() for candidate dicts (story clips)."""
+    try:
+        target = int(config.get("daily_target") or 12)
+    except (TypeError, ValueError):
+        target = 12
+    good = sum(1 for c in cands if c.get("quality") == "good")
+    return {"daily_target": target, "good": good, "weak": len(cands) - good, "enough": good >= target,
+            "note": None if good >= target else
+            f"Only {good} good candidates for a target of {target}: add more footage or mark moments by hand. "
+            f"Weak candidates are never used to fill the target."}
+
+
+AI_FIELDS = ("publish", "llm", "translations", "story")
 
 
 def _keep_manual_clips(project: Project, path, result: dict) -> None:

@@ -692,7 +692,9 @@ def render(project: Project, story: dict, opts, facecam, dest: Path,
 
             extra.append(f"Dialogue: 2,{_ass_time(a)},{_ass_time(b)},card,,0,0,0,,"
                          f"{{\\an5\\pos({W // 2},{H // 2})\\fad(120,120)}}{_ass_escape(p['text'])}")
-    ass = build_ass(words, total, ClipOptions.from_dict({**opts.to_dict(), "hook": bool(hook_text)}), layout, lang,
+    # story clips draw everything in the ASS file: a headline stays the ASS box ("brand" style)
+    ass = build_ass(words, total, ClipOptions.from_dict({**opts.to_dict(), "hook": bool(hook_text),
+                                                         "banner_style": "brand"}), layout, lang,
                     hook_text, hook_lang=pub.get("language") or lang, geo=geo, extra=extra)
 
     dest.parent.mkdir(parents=True, exist_ok=True)

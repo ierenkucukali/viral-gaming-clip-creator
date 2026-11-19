@@ -46,6 +46,14 @@ def _tool_version(exe: str) -> str:
         return "found"
 
 
+def _tool_version_flag(exe: str, flag: str) -> str:
+    try:
+        out = subprocess.run([exe, flag], capture_output=True, text=True, timeout=30, **no_window())
+        return (out.stdout or out.stderr).strip().splitlines()[0]
+    except (OSError, subprocess.SubprocessError, IndexError):
+        return "found"
+
+
 def _pip_install(packages: list[str]) -> bool:
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", *packages]
     console.print(f"[dim]$ {' '.join(cmd)}[/]")
@@ -133,9 +141,32 @@ class Doctor:
         except OSError as exc:
             self.add("Workspace", MISSING, f"{ws} not writable: {exc}")
         self.add("Settings file", INFO, str(config.config_path()))
+        self._check_live()
 
         self._print(plan)
         return 1 if any(s in (MISSING, FAIL) for _, s, _ in self.rows) else 0
+
+    def _check_live(self) -> None:
+        """Local gaming fork: what the live recorder / VOD import use, and the free disk."""
+        sl = shutil.which("streamlink")
+        self.add("Streamlink (live)", OK if sl else INFO,
+                 _tool_version_flag(sl, "--version") if sl else "optional fallback; yt-dlp is used first")
+        try:
+            free = shutil.disk_usage(config.workspace_dir()).free
+            gb = free / 1e9
+            self.add("Free disk", OK if gb >= 20 else WARN,
+                     f"{gb:.1f} GB in the workspace drive (~{gb / 1.8:.0f} h of 720p live at 4 Mbps)")
+        except OSError as exc:
+            self.add("Free disk", WARN, str(exc))
+        try:
+            from . import llm
+
+            models = llm.installed_models() if hasattr(llm, "installed_models") else None
+            if models is not None:
+                self.add("Ollama models", INFO, ", ".join(models) or "none")
+        except Exception:  # noqa: BLE001
+            pass
+        self.add("Paid APIs", OK, "none: Whisper, the LLM (Ollama) and ffmpeg all run on this PC")
 
     def _check_whisper_model(self, plan: BackendPlan) -> None:
         """The transcription model is big (large-v3-turbo ~1.6 GB): fetch it now if asked."""
@@ -221,7 +252,7 @@ class Doctor:
         schema = {"type": "object", "properties": {"answer": {"type": "integer"}}, "required": ["answer"]}
         try:
             t0 = time.perf_counter()
-            with llm.session(model) as m:
+            with llm.session(model, local=True) as m:
                 load = time.perf_counter() - t0
                 t1 = time.perf_counter()
                 out = m.json("Answer with JSON.", "What is 17 + 25?", schema, temperature=0.1, num_predict=40)

@@ -39,7 +39,8 @@ from .ui import console
 PROMPT_VERSION = 8
 MAX_SHIFT = 10.0
 # Short-form sweet spot per mode (seconds): full length-fit score inside this range.
-SWEET_SPOT = {"gaming": (18, 40), "study": (30, 55), "music": (15, 30)}
+SWEET_SPOT = {"gaming": (45, 120),  # local fork: story clips
+               "study": (30, 55), "music": (15, 30)}
 
 REASON_TEXT = {
     "loudness_spike": "sudden loud moment", "keyword": "reaction word", "laughter": "laughter",
@@ -47,6 +48,7 @@ REASON_TEXT = {
     "pause_then_burst": "silence then outburst", "steady_explanation": "calm explanation",
     "chorus": "music chorus", "drop": "music drop", "chat_spike": "chat exploded",
     "chat_reactions": "chat spammed reactions", "llm_explanation": "self-contained explanation",
+    "llm_story": "AI story pick",
 }
 # Game events read from the game screen (game signal). These are facts, not guesses.
 GAME_EVENT_TEXT = {

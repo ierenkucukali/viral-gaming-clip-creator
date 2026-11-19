@@ -690,7 +690,7 @@ def ass_styles(lang: str | None, scale: float) -> list[str]:
 def ass_lines(fx: FxPlan, lead: float, geo, layout: str, ts, lang: str | None, zone: dict | None) -> list[str]:
     """REPLAY badge, meme captions and chat bubbles (timeline times + lead)."""
     from . import bubbles as bubbles_mod
-    from ..clips import SPLIT_TOP, _ass_escape
+    from ..clips import _ass_escape, split_seam
 
     out = []
     split = layout == "split"
@@ -698,11 +698,11 @@ def ass_lines(fx: FxPlan, lead: float, geo, layout: str, ts, lang: str | None, z
         a, b = a + lead, b + lead
         if ins.kind == "replay":
             x = geo.margin_l - 20
-            y = (SPLIT_TOP + 40) if split else max(geo.hook_y or 120, 160)
+            y = (split_seam() + 40) if split else max(geo.hook_y or 120, 160)
             out.append(f"Dialogue: 5,{ts(a)},{ts(b)},replay,,0,0,0,,{{\\an7\\pos({x},{y})\\fad(120,160)}}"
                        f"● REPLAY")
         elif ins.kind == "freeze" and ins.text:
-            y = round((SPLIT_TOP + geo.h) / 2) if split else round(geo.h * 0.42)
+            y = round((split_seam() + geo.h) / 2) if split else round(geo.h * 0.42)
             from ..clips import _upper
 
             text = _ass_escape(_upper(ins.text, lang))  # meme style: capitals (Turkish İ / I kept right)

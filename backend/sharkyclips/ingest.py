@@ -12,10 +12,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+import time
+
 from . import __version__, audio, config, kick
 from .errors import SharkyClipsError, pip_hint, require_module, require_tool
 from .project import MODES, Project, make_project_id, project_for_id
 from .ui import console, download_progress, time_progress
+
+
+DOWNLOAD_ATTEMPTS = 4  # local fork: bounded retries with backoff around yt-dlp's own retries
 
 
 def is_url(text: str) -> bool:
@@ -141,6 +146,16 @@ def _download_error(exc: Exception, url: str) -> SharkyClipsError:
     return SharkyClipsError(f"Download failed: {text[:500]}", hint)
 
 
+def _cancel_requested() -> bool:
+    try:
+        from . import governor
+
+        job = governor.current_job()
+        return bool(job is not None and getattr(job, "cancel_requested", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _ingest_url(url: str) -> tuple[Project, dict]:
     from . import netguard
 
@@ -165,7 +180,8 @@ def _ingest_url(url: str) -> tuple[Project, dict]:
         raise SharkyClipsError("That URL is a playlist/channel.", "Pass a single video or VOD URL.")
     if info.get("is_live"):
         raise SharkyClipsError("This stream is live right now.",
-                               "Wait until the stream ends and use the VOD/replay URL.")
+                               "Use the YouTube LIVE card to record it from now, or wait until the stream "
+                               "ends and import the VOD/replay URL.")
     title = info.get("title") or info.get("id") or "video"
     canonical = info.get("webpage_url") or lookup
     media = info.get("media_url") or canonical  # the Kick fallback downloads its HLS playlist
@@ -188,11 +204,24 @@ def _ingest_url(url: str) -> tuple[Project, dict]:
                     prog.update(task, description="Merging")
 
             opts = _ydl_opts(project.dir, max_height) | {"progress_hooks": [hook]}
-            try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    ydl.download([media])
-            except Exception as exc:
-                raise _download_error(exc, url) from exc
+            for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+                try:
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        ydl.download([media])
+                    break
+                except Exception as exc:
+                    err = _download_error(exc, url)
+                    # login walls / bad links don't get better; network hiccups do (the .part file
+                    # is resumed by yt-dlp's continuedl on the next attempt)
+                    if attempt == DOWNLOAD_ATTEMPTS or "signed-in" in err.message or "playlist" in err.message:
+                        raise err from exc
+                    wait = min(60, 5 * 2 ** (attempt - 1))
+                    console.print(f"[yellow]Download interrupted ({err.message[:120]}); retrying in {wait}s "
+                                  f"(attempt {attempt + 1}/{DOWNLOAD_ATTEMPTS}) ...[/]")
+                    for _ in range(wait * 4):
+                        if _cancel_requested():
+                            raise err from exc
+                        time.sleep(0.25)
         if project.source_path is None:
             raise SharkyClipsError("Download finished but no video file was found.",
                                    f"Look inside {project.dir}")

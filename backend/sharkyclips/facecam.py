@@ -442,6 +442,82 @@ def verify_box(path: Path, duration: float, box: dict, count: int = 10) -> float
     return len({f[5] for f in hits}) / len(frames)
 
 
+# ----------------------------------------------------------------------------- per clip (local fork)
+
+WINDOW_FRAMES = 16
+WINDOW_MIN_S = 60.0  # short clips are padded to this much footage around them
+CLIP_CONFIDENT = 0.55
+
+
+def _box_iou(a: dict, b: dict) -> float:
+    ix = max(0.0, min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"]))
+    iy = max(0.0, min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"]))
+    inter = ix * iy
+    union = a["w"] * a["h"] + b["w"] * b["h"] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _face_share(frames: list[np.ndarray], box: dict, finder: FaceFinder) -> float:
+    if not frames:
+        return 0.0
+    h, w = frames[0].shape[:2]
+    bx0, by0 = box["x"] * w, box["y"] * h
+    bx1, by1 = bx0 + box["w"] * w, by0 + box["h"] * h
+    n = 0
+    for fr in frames:
+        for (x, y, fw, fh, _s) in finder(fr):
+            cx, cy = x + fw / 2, y + fh / 2
+            if bx0 <= cx <= bx1 and by0 <= cy <= by1 and fh < (by1 - by0):
+                n += 1
+                break
+    return n / len(frames)
+
+
+def for_window(path: Path, start: float, end: float, duration: float, base: dict | None,
+               cache_dir: Path | None = None) -> dict:
+    """Where is the streamer's camera during THIS clip? (streamers sometimes move or resize it).
+
+    Frames are sampled inside the clip (padded to >= 60 s) and analysed like the whole video.
+    -> {"box": {...} | None, "why": ..., "confidence", "base_share", "frames"}
+       box = a confident box found here (moved / resized cam), else the video's box when a live
+       face is in it here, else None (no camera in this part: the clip uses gameplay only)."""
+    import json
+
+    key = f"win_{start:.1f}_{end:.1f}_{hashlib.sha1(json.dumps(base, sort_keys=True).encode()).hexdigest()[:8]}.json"
+    if cache_dir is not None and (cache_dir / key).is_file():
+        try:
+            return json.loads((cache_dir / key).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+    pad = max(0.0, (WINDOW_MIN_S - (end - start)) / 2)
+    a, b = max(0.0, start - pad), min(duration or end + pad, end + pad)
+    times = [a + (b - a) * (i + 0.5) / WINDOW_FRAMES for i in range(WINDOW_FRAMES)]
+    frames, _t = _sample_frames(path, duration, times=times)
+    out: dict = {"box": None, "why": "no_frames", "confidence": 0.0, "base_share": 0.0, "frames": len(frames),
+                 "window": [round(a, 2), round(b, 2)]}
+    if len(frames) >= 4:
+        finder = FaceFinder()
+        res = analyze_frames(frames, finder)
+        best = res["candidates"][0] if res["candidates"] else None
+        base_share = _face_share(frames, base, finder) if base else 0.0
+        out.update(confidence=best["confidence"] if best else 0.0, base_share=round(base_share, 2))
+        if best and best["confidence"] >= CLIP_CONFIDENT and (not base or _box_iou(best, base) < 0.6
+                                                             or base_share < 0.3):
+            fc = to_facecam(best, source="auto")
+            out.update(box={**fc.to_dict(), "source": "clip"}, why="found_here")
+        elif base and base_share >= 0.3:
+            out.update(box=dict(base), why="video_box")
+        elif best and best["confidence"] >= 0.4 and not base:
+            fc = to_facecam(best, source="auto")
+            out.update(box={**fc.to_dict(), "source": "clip"}, why="found_here_low")
+        else:
+            out.update(why="no_camera_here")
+    if cache_dir is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        (cache_dir / key).write_text(json.dumps(out), encoding="utf-8")
+    return out
+
+
 # ----------------------------------------------------------------------------- remembered layouts
 
 def _layouts_path() -> Path:

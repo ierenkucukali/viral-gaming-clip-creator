@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { urls, type BrandPreset, type Candidate, type ClipOptions, type Facecam, type Word } from "../api";
 import { captionAt, groupWords, joinerFor, upper } from "../captions";
-import { coverRect, OUT_W, SPLIT_TOP as OUT_SPLIT, splitRects, zoomRect, zoomsAt, type PreviewFx, type Rect } from "../previewMath";
+import { camCoverRect, coverRect, OUT_W, splitFromOptions, splitRects, zoomRect, zoomsAt, type PreviewFx, type Rect } from "../previewMath";
 
 // Canvas size (9:16). The picture is cut and zoomed with previewMath.ts = what the renderer
 // does (backend/sharkyclips/clips.py at 1080x1920); captions / hook / brand are drawn on top.
 const W = 360;
 const H = 640;
 const S = W / OUT_W; // scale from the 1080-wide render to this canvas
-const SPLIT_TOP = OUT_SPLIT * S;
 const GOLD = "#D9B56A";
 
 interface Props {
@@ -34,6 +33,52 @@ export function resolveLayout(layout: ClipOptions["layout"], facecam: Facecam | 
 
 function blit(ctx: CanvasRenderingContext2D, v: CanvasImageSource, r: Rect, dx: number, dy: number, dw: number, dh: number) {
   if (r[2] > 0 && r[3] > 0) ctx.drawImage(v, r[0], r[1], r[2], r[3], dx, dy, dw, dh);
+}
+
+// Instagram-style headline: the same numbers as backend/sharkyclips/edit/headline.py (change both).
+const HL = { font: 54, lineH: 1.22, padX: 0.45, padY: 0.3, radius: 0.3, maxW: 0.88, maxLines: 2, minShrink: 0.6 };
+const HL_FONT = `Arial, "Liberation Sans", Helvetica, "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+
+/** Lines, font size and box size of the headline on this canvas (null: no text). */
+function headlineBox(ctx: CanvasRenderingContext2D, text: string, canvasW: number, scale: number) {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  const base = Math.max(8, Math.round(HL.font * scale));
+  const maxBox = canvasW * HL.maxW;
+  const measure = (s: string, size: number) => {
+    ctx.font = `700 ${size}px ${HL_FONT}`;
+    return ctx.measureText(s).width;
+  };
+  const wrap = (size: number, maxText: number): string[] | null => {
+    const lines: string[] = [];
+    let cur = "";
+    for (const w of words) {
+      const test = cur ? `${cur} ${w}` : w;
+      if (cur && measure(test, size) > maxText) {
+        lines.push(cur);
+        cur = w;
+      } else cur = test;
+    }
+    if (cur) lines.push(cur);
+    return lines.length > HL.maxLines || lines.some((l) => measure(l, size) > maxText) ? null : lines;
+  };
+  let size = base;
+  let lines: string[] | null = null;
+  while (size >= base * HL.minShrink) {
+    lines = wrap(size, maxBox - 2 * Math.round(size * HL.padX));
+    if (lines) break;
+    size = Math.floor(size * 0.94);
+  }
+  if (!lines) {
+    size = Math.max(8, Math.round(base * HL.minShrink));
+    lines = (wrap(size, 1e9) ?? [words.join(" ")]).slice(0, HL.maxLines);
+  }
+  const padX = Math.round(size * HL.padX);
+  const padY = Math.round(size * HL.padY);
+  const lineH = Math.round(size * HL.lineH);
+  const width = Math.min(Math.round(Math.max(...lines.map((l) => measure(l, size)))) + 2 * padX, Math.round(maxBox));
+  const height = lineH * lines.length + 2 * padY;
+  return { lines, size, padY, lineH, width, height, radius: Math.round(HL.radius * lineH) };
 }
 
 export default function VerticalPreview({ video, clip, range, options, facecam, words, lang, hookText, fx, brand }: Props) {
@@ -65,6 +110,16 @@ export default function VerticalPreview({ video, clip, range, options, facecam, 
     const ctx = cv.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const layout = resolveLayout(options.layout, facecam);
+    const sp = splitFromOptions(options);
+    const camPx = sp.camH * S;
+    const gamePx = H - camPx;
+    const camY = sp.order === "top" ? 0 : gamePx;
+    const gameY = sp.order === "top" ? camPx : 0;
+    const seam = sp.order === "top" ? camPx : gamePx;
+    // headline: it replaces the hook text; on the split line the captions move into the gameplay panel
+    const banner = (options.banner ?? "").trim();
+    const igBanner = !!banner && (options.banner_style ?? "ig") === "ig";
+    const bannerCapY = sp.order === "top" ? seam + 260 * S : seam - 260 * S;
     const start = range?.start ?? clip?.start ?? 0;
     const end = range?.end ?? clip?.end ?? 0;
     const prim = brand?.caption_color || "#fff";
@@ -97,11 +152,16 @@ export default function VerticalPreview({ video, clip, range, options, facecam, 
         if (layout === "crop") {
           blit(ctx, v, zoomRect(coverRect(whole, W, H), z.full), 0, 0, W, H);
         } else if (layout === "fit") {
-          const tc = tiny.getContext("2d")!;
-          blit(tc, v, coverRect(whole, tiny.width, tiny.height), 0, 0, tiny.width, tiny.height);
-          ctx.drawImage(tiny, 0, 0, W, H);
-          ctx.fillStyle = "rgba(0,0,0,0.25)";
-          ctx.fillRect(0, 0, W, H);
+          if (options.fit_bg === "black") {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, W, H);
+          } else {
+            const tc = tiny.getContext("2d")!;
+            blit(tc, v, coverRect(whole, tiny.width, tiny.height), 0, 0, tiny.width, tiny.height);
+            ctx.drawImage(tiny, 0, 0, W, H);
+            ctx.fillStyle = "rgba(0,0,0,0.25)";
+            ctx.fillRect(0, 0, W, H);
+          }
           const scale = Math.min(W / vw, H / vh);
           const dw = vw * scale;
           const dh = vh * scale;
@@ -109,10 +169,41 @@ export default function VerticalPreview({ video, clip, range, options, facecam, 
         } else if (facecam) {
           // the renderer's exact crops (clips.split_rects): the cam rect is scaled to the panel,
           // the gameplay rect center-cropped to it, then each zoomed around its focus point
-          const { cam, game } = splitRects(vw, vh, facecam);
-          const bottomH = H - SPLIT_TOP;
-          blit(ctx, v, zoomRect(cam, z.cam, 0.45), 0, 0, W, SPLIT_TOP);
-          blit(ctx, v, zoomRect(coverRect(game, W, bottomH), z.scene), 0, SPLIT_TOP, W, bottomH);
+          const { cam, game } = splitRects(vw, vh, facecam, sp);
+          blit(ctx, v, zoomRect(cam, z.cam, 0.45), 0, camY, W, camPx);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, gameY, W, gamePx);
+          ctx.clip();
+          let gd: [number, number, number, number]; // where the gameplay rect lands on the canvas
+          if (sp.gameFit === "crop") {
+            const r = coverRect(game, W, gamePx);
+            blit(ctx, v, zoomRect(r, z.scene), 0, gameY, W, gamePx);
+            const k = W / r[2];
+            gd = [-(r[0] - game[0]) * k, gameY - (r[1] - game[1]) * k, game[2] * k, game[3] * k];
+          } else {
+            if (sp.gameFit === "blur") {
+              const tc = tiny.getContext("2d")!;
+              blit(tc, v, coverRect(game, tiny.width, tiny.height), 0, 0, tiny.width, tiny.height);
+              ctx.drawImage(tiny, 0, gameY, W, gamePx);
+              ctx.fillStyle = "rgba(0,0,0,0.25)";
+              ctx.fillRect(0, gameY, W, gamePx);
+            } else {
+              ctx.fillStyle = "#000";
+              ctx.fillRect(0, gameY, W, gamePx);
+            }
+            const k = Math.min(W / game[2], gamePx / game[3]);
+            gd = [(W - game[2] * k) / 2, gameY + (gamePx - game[3] * k) / 2, game[2] * k, game[3] * k];
+            blit(ctx, v, zoomRect(game, z.scene), gd[0], gd[1], gd[2], gd[3]);
+          }
+          const cover = sp.hideCam ? camCoverRect(vw, vh, facecam, game) : null;
+          if (cover) {
+            // the renderer blurs the original overlay here: the preview shows the same spot darkened
+            const k = gd[2] / game[2];
+            ctx.fillStyle = "rgba(20,24,34,0.85)";
+            ctx.fillRect(gd[0] + cover[0] * k, gd[1] + cover[1] * k, cover[2] * k, cover[3] * k);
+          }
+          ctx.restore();
         }
         ctx.restore();
       }
@@ -121,7 +212,7 @@ export default function VerticalPreview({ video, clip, range, options, facecam, 
         // captions
         const cap = options.subtitles === "none" ? null : captionAt(groups, t, end);
         if (cap) {
-          const capY = layout === "split" ? SPLIT_TOP : 1390 * S;
+          const capY = layout === "split" ? (banner ? bannerCapY : seam) : 1390 * S;
           const bold = options.subtitles === "bold";
           const size = (bold ? 86 : options.subtitles === "clean" ? 62 : 56) * S;
           ctx.font = `${options.subtitles === "minimal" ? 500 : 800} ${size}px ${fontFam}`;
@@ -166,7 +257,7 @@ export default function VerticalPreview({ video, clip, range, options, facecam, 
         }
         // hook
         // (a seamless loop shows it for the last moment too: it is already there when the clip starts over)
-        if (options.hook && hookText && (t - start < 3.2 || (options.loop && t <= end && end - t < 0.8))) {
+        if (options.hook && hookText && !banner && (t - start < 3.2 || (options.loop && t <= end && end - t < 0.8))) {
           const hookY = (layout === "fit" ? 330 : 120) * S;
           const size = 64 * S;
           ctx.font = `800 ${size}px ${fontFam}`;
@@ -194,6 +285,29 @@ export default function VerticalPreview({ video, clip, range, options, facecam, 
           });
           ctx.fillStyle = "#0E1A33";
           lines.forEach((l, i) => ctx.fillText(l, W / 2, hookY + i * lh + (lh - size) / 2));
+        }
+        // Instagram-style headline for the whole clip (edit/headline.py): over the captions,
+        // its centre on the split line, else its top at the hook position
+        if (igBanner) {
+          const hb = headlineBox(ctx, banner, W, S);
+          if (hb) {
+            // "fit" with a wide picture: right above it (clips.fit_video_top + 28 px), like the renderer
+            const vt = layout === "fit" && vw / vh > 1080 / 1920 + 0.02 ? Math.floor((1920 - Math.round((1080 * vh) / vw)) / 2) : null;
+            const top = layout === "split" ? seam - hb.height / 2
+              : vt !== null ? Math.max(40 * S, vt * S - hb.height - 28 * S)
+              : (layout === "fit" ? 330 : 120) * S;
+            const left = (W - hb.width) / 2;
+            ctx.fillStyle = "#fff";
+            ctx.beginPath();
+            ctx.roundRect(left, top, hb.width, hb.height, hb.radius);
+            ctx.fill();
+            ctx.font = `700 ${hb.size}px ${HL_FONT}`;
+            ctx.direction = "ltr";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = "#000";
+            hb.lines.forEach((l, i) => ctx.fillText(l, W / 2, top + hb.padY + i * hb.lineH + hb.lineH / 2));
+          }
         }
       }
 
