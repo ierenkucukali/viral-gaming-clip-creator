@@ -54,6 +54,7 @@ MAX_UPLOAD_BYTES = 99 * 1024 * 1024  # Cloudinary free plan: 100 MB per video
 CAPTION_MAX = {"instagram": 2196, "tiktok": 2200, "youtube": 5000}
 LOG_MAX = 300
 FINAL = ("sent", "cancelled", "error")
+ERROR_KEEP_DAYS = 7  # the hosted video of a post that failed stays this long (retry in Buffer)
 TR_ONLY_TAGS = {"oyun", "twitchtr", "kicktr", "komikanlar", "oyunculuk", "oyunvideolari", "türkiye", "turkiye"}
 MODES = ("spread", "interval", "times")
 
@@ -1081,7 +1082,9 @@ def _cleanup(st: dict, s: dict, now: datetime) -> list[str]:
         if not users or any(i["state"] not in FINAL for i in users):
             continue
         last = max((_parse(i.get("sent_at")) or datetime.fromtimestamp(i.get("updated_at") or 0, timezone.utc)) for i in users)
-        if now - last < timedelta(minutes=30):
+        # a failed post may be retried (in Buffer or with "Send again"): its video stays for a week
+        keep = timedelta(days=ERROR_KEEP_DAYS) if any(i["state"] == "error" for i in users) else timedelta(minutes=30)
+        if now - last < keep:
             continue
         gone = _r2().delete(m["object"]) if m.get("host") == "r2" else cloud_delete(m["public_id"])
         if gone:

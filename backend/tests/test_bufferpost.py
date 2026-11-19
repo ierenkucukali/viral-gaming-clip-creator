@@ -489,3 +489,20 @@ def test_the_games_own_hashtags_and_no_fixed_gta_tags(env):
     assert "#gta6" in gta["caption"] and "#gta" in gta["caption"].split()
     none = B.default_texts(proj, {"story": {"headline": "Speed laughs at chat 😂"}})
     assert none["caption"].split("\n\n")[-1].split() == ["#ishowspeed", "#gaming", "#streamer", "#fyp"]
+
+
+def test_a_failed_posts_video_stays_for_a_retry(env):
+    B.test()
+    B.send(_picks(1), wait=True)
+    yt = next(i for i in _items("youtube") if i["state"] == "scheduled")
+    for pid, p in env.net.posts.items():
+        if pid == yt["post_id"]:
+            p.update(status="error", error={"message": "daily upload limit"})
+        else:
+            p.update(status="sent", sentAt="2026-11-19T10:00:00Z")
+    soon = datetime.now(timezone.utc) + timedelta(hours=2)
+    B.tick(now=soon, force_sync=True)
+    B.tick(now=soon + timedelta(hours=1))
+    assert env.net.destroyed == []  # kept: the YouTube post may be retried
+    B.tick(now=soon + timedelta(days=8))
+    assert len(env.net.destroyed) == 1  # a week later it is cleaned up

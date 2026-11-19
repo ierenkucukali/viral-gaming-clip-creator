@@ -7,6 +7,57 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.65] - 2026-11-19
+### A failed post can be retried
+- **The video of a post that failed stays online for 7 days** (it was removed 30 minutes after the
+  failure). A failed post (for example YouTube's daily upload limit of a channel that is not
+  phone-verified) can now be retried in Buffer, and the video is still there; before, the retry failed
+  with "Media URL is not publicly accessible (HTTP 404)".
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Hata veren gönderi tekrar denenebilir
+- **Hata veren bir gönderinin videosu 7 gün çevrimiçi kalır** (önceden hatadan 30 dakika sonra
+  siliniyordu). Hata veren bir gönderi (örneğin telefonla doğrulanmamış bir YouTube kanalının günlük
+  yükleme sınırı) artık Buffer'da tekrar denenebilir ve video hâlâ oradadır; önceden tekrar deneme
+  "Media URL is not publicly accessible (HTTP 404)" hatası veriyordu.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Das Video eines fehlgeschlagenen Beitrags bleibt 7 Tage online, damit er in Buffer erneut versucht werden kann (vorher: Fehler HTTP 404).
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- A sikertelen bejegyzés videója 7 napig online marad, így a Bufferben újra lehet próbálni (korábban: HTTP 404 hiba).
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Видео неудачной публикации остаётся онлайн 7 дней, чтобы её можно было повторить в Buffer (раньше: ошибка HTTP 404).
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- يبقى فيديو المنشور الذي فشل متاحًا لمدة 7 أيام حتى يمكن إعادة محاولته في Buffer (سابقًا: خطأ HTTP 404).
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- 发布失败的帖子的视频现在会在线保留 7 天（以前在失败 30 分钟后就被删除），因此可以在 Buffer 中重新尝试发布，例如因 YouTube 未经手机验证的频道每日上传上限而失败的帖子；以前重试会报错“Media URL is not publicly accessible (HTTP 404)”。
+
+</details>
+
 ## [1.2.64] - 2026-11-19
 ### Clips written for the game that is played
 - **The AI names the game** of every video (from the title and what is said) and writes for it: the
