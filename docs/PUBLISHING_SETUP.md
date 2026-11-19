@@ -1,5 +1,34 @@
 # Connecting YouTube, TikTok and Instagram + auto-post
 
+## Recommended: Buffer (1.2.53)
+
+Buffer posts to Instagram Reels, TikTok and YouTube Shorts for you, also while this PC is off. The free
+Buffer plan is enough: 3 channels, 10 scheduled posts per channel at a time, API access (600 requests a
+day; the app uses about 2-3 per post).
+
+1. **Buffer:** sign up at <https://buffer.com>, connect Instagram (Business or Creator account), TikTok
+   and YouTube. Then <https://publish.buffer.com/settings/api> > create an API key.
+2. **Video hosting (Cloudinary, free, no card):** Buffer's API can't take a file, it fetches each
+   video from a public link. Sign up at <https://cloudinary.com>, copy the **Cloud name** (Dashboard)
+   and an **API key + API secret** (Settings > API Keys). Each clip is uploaded right before it goes
+   into Buffer and deleted after every platform posted it (max 100 MB per clip on the free plan; a
+   bigger clip is re-encoded smaller first).
+3. **In the app:** Gaming page > **Setup** > Buffer: paste the keys, press **Save and test**. The
+   channels are linked by themselves. Set the posts a day per platform (default 10) and the time
+   window (default 10:00-23:00, spread evenly) or fixed times.
+4. **Use it:** Gaming page > **Pick & send**: tick clips, edit title / caption if you like, **Send to
+   Buffer**. Every post gets its own time. Only 10 per channel sit in Buffer at once (free plan); the
+   rest wait in the app and go in when there is room, so open the app now and then (it checks about
+   once a minute while it runs). **Schedule** shows everything by day with Cancel / Plan again.
+
+What Buffer's API lets us set (developers.buffer.com, checked 2026-11-19): post time (`customScheduled`
++ `dueAt`), caption, the video link + cover frame (`thumbnailOffset`, Instagram / TikTok), YouTube title,
+category, privacy, made for kids, notify subscribers; Instagram post type (reel), share to feed, first
+comment; the AI-generated label. Buffer's own posting-slot schedule can't be changed through the API,
+so the app computes the times itself.
+
+## Without Buffer (advanced)
+
 Everything here is free. No passwords are ever stored by the app: YouTube and TikTok (API) use the
 platforms' own sign-in pages and keep only an encrypted token on this PC; TikTok Studio (browser
 mode) keeps only its own browser profile, in which you log in yourself.

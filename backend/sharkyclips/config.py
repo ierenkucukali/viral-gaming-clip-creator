@@ -45,6 +45,9 @@ DEFAULTS: dict[str, Any] = {
     # {"enabled": bool, "platforms": {"youtube"|"tiktok"|"reels": {"enabled": bool, "per_day": 1..3}},
     #  "times": ["12:00", "18:00", "21:00"], "min_score": 55, "days_ahead": 2, "tiktok_consent": bool}
     "autopost": {},
+    "buffer": {},  # local fork: Buffer publishing (bufferpost.py)
+    "story_extra_prompt": "",  # local fork: the channel owner's extra instructions for the story finder
+    "gaming_auto_render": True,  # local fork: render the AI's story clips as soon as they are found
     "candidate_count": None,  # None = ~1 per 4 min (3..40); else 1..60
     "daily_target": 12,  # how many publishable clips you want per day (10-15); never auto-filled with weak ones
     "weak_score": 35,  # candidates under this relative hype score (or without a real reason) are labelled weak

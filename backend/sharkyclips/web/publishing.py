@@ -765,6 +765,14 @@ class Scheduler:
                 acts += autopilot.tick()
             except Exception:  # noqa: BLE001 - never stops the publish loop
                 pass
+            try:  # local fork: Buffer outbox (bufferpost.py): push waiting posts, check sent ones
+                from .. import bufferpost
+
+                acts += bufferpost.tick()
+            except Exception:  # noqa: BLE001 - never stops the publish loop
+                from ..ui import console
+
+                console.print(f"[red]Buffer:[/]\n{traceback.format_exc()}")
             try:  # local fork: auto-post N clips a day per platform (autopost.py, off by default)
                 from .. import autopost
 

@@ -158,7 +158,10 @@ def submit_highlights(project_id: str, mode: str | None = None, force: bool = Fa
         project = get_project(project_id)
         review = state.load_review(project)
         if not review["facecam_checked"] and not clipstyle.is_direct(project):  # direct: no picture analysis
-            submit_facecam(project_id)
+            # local fork: the story clips render by themselves once the camera box is known
+            submit_facecam(project_id, then=lambda _j: submit_auto_render(project_id))
+        else:
+            submit_auto_render(project_id)
         if llm_available() and config.get("auto_analyze") is not False:
             submit_analyze(project_id)  # titles, viral score, ... (cached per clip)
 
@@ -187,6 +190,14 @@ def submit_analyze(project_id: str, lang: str | None = None, force: bool = False
 
         res = analyze_project(get_project(project_id), out_lang=lang, force=force, on_progress=progress,
                               ranks=ranks, meta_only=meta_only)
+        try:  # local fork: seconds per clip for the Gaming page's time estimate
+            from .. import llmcloud
+
+            done = len(res["candidates"]) - len(res.get("failed") or [])
+            if done > 0 and float(res.get("total_seconds") or 0) > 1:
+                speeds.record("package_cloud" if llmcloud.active() else "package_local", float(res["total_seconds"]), done)
+        except Exception:  # noqa: BLE001
+            pass
         return {"language": res["language"], "model": res["model"], "seconds": res["total_seconds"],
                 "count": len(res["candidates"]), "failed": res["failed"], "meta_only": meta_only}
 
@@ -213,7 +224,39 @@ def submit_titles(project_id: str, cid: str) -> Job:
     return jobs.submit("titles", "gpu", project_id, {"clip_id": cid}, run, front=True)
 
 
-def submit_facecam(project_id: str, fresh: bool = False) -> Job:
+def submit_auto_render(project_id: str) -> list[Job]:
+    """Local fork: a gaming video's AI story clips are rendered right after the analysis (Gaming page
+    flow: add a video -> the clips are ready to pick). Clips already rendered from the same cut stay."""
+    if config.get("gaming_auto_render") is False:
+        return []
+    try:
+        project = get_project(project_id)
+        hl = state.load_highlights(project) or {}
+        if (hl.get("mode") or project.load_meta().get("mode")) != "gaming":
+            return []
+        clips = state.load_clips(project) if (project.dir / "clips.json").is_file() else {}
+        ids = []
+        for c in hl.get("candidates") or []:
+            if not c.get("story") or c.get("quality") == "weak":
+                continue
+            old = clips.get(c["id"]) or {}
+            if old.get("file") and (project.dir / "clips" / old["file"]).is_file() \
+                    and abs(float(old.get("start") or -1) - float(c["start"])) < 0.5 \
+                    and abs(float(old.get("end") or -1) - float(c["end"])) < 0.5:
+                continue
+            ids.append(c["id"])
+        if not ids:
+            return []
+        review = state.load_review(project, hl)
+        return submit_render(project_id, ids, ClipOptions.from_dict(review["options"]), review["hooks"])
+    except Exception as exc:  # noqa: BLE001 - the clips can still be rendered by hand
+        from ..ui import console
+
+        console.print(f"[yellow]Auto render skipped: {exc}[/]")
+        return []
+
+
+def submit_facecam(project_id: str, fresh: bool = False, then=None) -> Job:
     """Facecam: the layout remembered for this channel + resolution (checked on a few frames),
     else a full detection. fresh=True ("Detect again") ignores the remembered layout."""
     def run(job: Job):
@@ -225,7 +268,7 @@ def submit_facecam(project_id: str, fresh: bool = False) -> Job:
         state.save_review(project, {"facecam": res["facecam"]})
         return res
 
-    return jobs.submit("facecam", "io", project_id, {"fresh": fresh}, run)
+    return jobs.submit("facecam", "io", project_id, {"fresh": fresh}, run, then)
 
 
 def submit_chat(project_id: str, force: bool = False) -> Job:
@@ -1548,7 +1591,7 @@ def api_create(body: dict, request: Request) -> dict:
 @app.put("/api/uploads")
 async def api_upload(request: Request, filename: str = Query(...), mode: str = Query("gaming"),
                      language: str = Query("auto"), easy: bool = Query(False),
-                     full_upload: bool | None = Query(None)) -> dict:
+                     full_upload: bool | None = Query(None), clip_style: str | None = Query(None)) -> dict:
     """Raw file upload (streamed straight to disk - works for multi-GB stream files).
     easy=true: an Easy mode project (mode "auto" = detect the content type)."""
     mode_auto = mode == "auto"
@@ -1597,6 +1640,8 @@ async def api_upload(request: Request, filename: str = Query(...), mode: str = Q
     extra = {"easy": True, "mode_auto": mode_auto} if easy else {}
     if full_upload is not None:
         extra["full_upload"] = bool(full_upload)
+    if clip_style in ("streamer", "direct"):  # local fork: the Gaming page's clip style
+        extra["clip_style"] = clip_style
     return submit_import(str(dest), mode, language, name, cleanup=dest, extra=extra or None).to_dict()
 
 
@@ -2520,6 +2565,7 @@ from .pubqueue_api import router as _pubqueue_router  # noqa: E402 - publish que
 from .trash_api import router as _trash_router  # noqa: E402 - delete + trash + disk usage (1.2.41)
 from .fullvideo_api import router as _fullvideo_router  # noqa: E402 - full video + Channel style (1.2.51)
 from .liverec_api import router as _liverec_router  # noqa: E402 - local fork: live recorder + export
+from .clipper_api import router as _clipper_router  # noqa: E402 - local fork: Buffer, prompts, estimate
 
 app.include_router(_auth_router)
 app.include_router(_studio_router)
@@ -2537,6 +2583,7 @@ app.include_router(_platforms_router)
 app.include_router(_dub_router)
 app.include_router(_fullvideo_router)
 app.include_router(_liverec_router)
+app.include_router(_clipper_router)
 
 
 @app.get("/api/{rest:path}")

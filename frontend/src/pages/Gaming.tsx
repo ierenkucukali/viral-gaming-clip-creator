@@ -1,10 +1,13 @@
-// Local gaming fork: one page for the three sources (local file, YouTube VOD, YouTube LIVE),
-// the live recorder sessions, clip-length tuning and the daily "export selected" step.
-// Everything runs on this PC; nothing is posted anywhere (you review and upload by hand).
+// Local gaming fork: the clipper in four tabs: 1 add a video (local file, YouTube VOD, YouTube LIVE)
+// in a clip style -> the AI finds the stories and the clips render by themselves; 2 pick clips and
+// send them to Buffer; 3 the posting schedule; Setup: AI (Claude / Gemini / local), the prompt,
+// Buffer + video hosting, clip lengths. Analysis + rendering run on this PC.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, req } from "../api";
+import { api, req, uploadFile } from "../api";
 import { useI18n } from "../i18n";
 import { href } from "../router";
+import { BufferPicker, BufferSchedule, BufferSetupCard, type BView } from "../components/Buffer";
+import { EstimateCard, ProgressCard, PromptCard } from "../components/GamingExtras";
 
 type LiveState =
   | "starting" | "connecting" | "recording" | "reconnecting" | "paused" | "stopped" | "ended" | "failed"
@@ -69,12 +72,39 @@ const hms = (t: number) => {
 };
 const gb = (b: number) => `${(b / 1e9).toFixed(1)} GB`;
 
+type GTab = "create" | "pick" | "schedule" | "setup";
+const TAB_KEY = "sc.gaming.tab";
+
 export default function Gaming() {
   const { t } = useI18n();
   const [ov, setOv] = useState<LiveOverview | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [style, setStyleState] = useState<ClipStyle>("streamer");
+  const [tab, setTabState] = useState<GTab>(() => {
+    try {
+      const v = localStorage.getItem(TAB_KEY);
+      return v === "pick" || v === "schedule" || v === "setup" ? v : "create";
+    } catch {
+      return "create";
+    }
+  });
+  const setTab = (v: GTab) => {
+    setTabState(v);
+    try {
+      localStorage.setItem(TAB_KEY, v);
+    } catch {
+      /* private window */
+    }
+    window.scrollTo({ top: 0 });
+  };
+  const [ready, setReady] = useState<{ ai: string; buffer: boolean } | null>(null);
+  const loadReady = useCallback(() => {
+    Promise.all([req<AIView>("GET", "/api/gaming/ai"), req<BView>("GET", "/api/buffer")])
+      .then(([a, b]) => setReady({ ai: a.provider, buffer: b.keys.has_buffer && b.keys.has_cloudinary && !!b.settings.organization_id }))
+      .catch(() => undefined);
+  }, []);
+  useEffect(loadReady, [loadReady, tab]);
   useEffect(() => {
     req<{ clip_style?: ClipStyle }>("GET", "/api/gaming/settings")
       .then((s) => setStyleState(s.clip_style === "direct" ? "direct" : "streamer")).catch(() => undefined);
@@ -100,38 +130,83 @@ export default function Gaming() {
     return () => window.clearInterval(iv);
   }, [load]);
 
+  const tabs: { id: GTab; label: string; badge?: string }[] = [
+    { id: "create", label: `1 · ${t("gx.tab_create")}` },
+    { id: "pick", label: `2 · ${t("gx.tab_pick")}` },
+    { id: "schedule", label: `3 · ${t("gx.tab_schedule")}` },
+    { id: "setup", label: t("gx.tab_setup"), badge: ready && (!ready.buffer || ready.ai === "ollama") ? "!" : undefined },
+  ];
   return (
     <div className="page gaming-page">
       <div className="page-head">
         <div>
           <h1 className="display">{t("gaming.title")}</h1>
-          <p className="lede muted">{t("gaming.lede")}</p>
+          <p className="lede muted">{t("gx.lede")}</p>
         </div>
       </div>
-      {err && <div className="notice notice-danger">{err}</div>}
-      <StyleCard style={style} onChange={setStyle} />
-      <div className="grid-cards" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginTop: 16 }}>
-        <SourceCard kind="file" style={style} />
-        <SourceCard kind="vod" style={style} />
-        <LiveStartCard ov={ov} onStarted={(id) => { setOpen(id); load(); }} />
-      </div>
-      {ov && ov.sessions.length > 0 && (
-        <section style={{ marginTop: 24 }}>
-          <h2>{t("live.sessions")}</h2>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            {ov.sessions.map((s) => (
-              <button key={s.id} className={`btn btn-sm ${open === s.id ? "btn-primary" : ""}`} onClick={() => setOpen(s.id)}>
-                {s.name || s.title || s.id} · {t(`live.state.${s.state}`)}
-              </button>
-            ))}
-          </div>
-          {open && <LiveSessionView sid={open} clipLast={ov.clip_last} onChange={load} />}
-        </section>
+      <ol className="gx-steps" aria-label={t("gx.how")}>
+        <li>{t("gx.step1")}</li>
+        <li>{t("gx.step2")}</li>
+        <li>{t("gx.step3")}</li>
+        <li>{t("gx.step4")}</li>
+      </ol>
+      {ready && (ready.ai === "ollama" || !ready.buffer) && tab !== "setup" && (
+        <div className="notice notice-warn small gx-ready" role="status">
+          {ready.ai === "ollama" ? t("gx.need_ai") : null} {!ready.buffer ? t("gx.need_buffer") : null}
+          <button className="btn btn-sm" onClick={() => setTab("setup")}>{t("buf.open_setup")}</button>
+        </div>
       )}
-      <AICard />
-      <TuningCard />
-      <ExportCard />
-      <AutoPostCard />
+      <div className="gx-tabs" role="tablist" aria-label={t("gaming.title")}>
+        {tabs.map((x) => (
+          <button key={x.id} role="tab" id={`gx-tab-${x.id}`} aria-selected={tab === x.id} aria-controls={`gx-panel-${x.id}`}
+            className={tab === x.id ? "on" : ""} onClick={() => setTab(x.id)}>
+            {x.label}{x.badge && <span className="gx-badge" aria-label={t("buf.not_ready")}>{x.badge}</span>}
+          </button>
+        ))}
+      </div>
+      {err && <div className="notice notice-danger">{err}</div>}
+      <div role="tabpanel" id={`gx-panel-${tab}`} aria-labelledby={`gx-tab-${tab}`} className="gx-panel">
+        {tab === "create" && (
+          <>
+            <StyleCard style={style} onChange={setStyle} />
+            <div className="grid-cards" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginTop: 16 }}>
+              <SourceCard kind="file" style={style} />
+              <SourceCard kind="vod" style={style} />
+              <LiveStartCard ov={ov} onStarted={(id) => { setOpen(id); load(); }} />
+            </div>
+            <ProgressCard />
+            {ov && ov.sessions.length > 0 && (
+              <section style={{ marginTop: 24 }}>
+                <h2>{t("live.sessions")}</h2>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                  {ov.sessions.map((s) => (
+                    <button key={s.id} className={`btn btn-sm ${open === s.id ? "btn-primary" : ""}`} onClick={() => setOpen(s.id)}>
+                      {s.name || s.title || s.id} · {t(`live.state.${s.state}`)}
+                    </button>
+                  ))}
+                </div>
+                {open && <LiveSessionView sid={open} clipLast={ov.clip_last} onChange={load} />}
+              </section>
+            )}
+            <EstimateCard />
+          </>
+        )}
+        {tab === "pick" && <BufferPicker onSent={() => setTab("schedule")} goSetup={() => setTab("setup")} />}
+        {tab === "schedule" && <BufferSchedule />}
+        {tab === "setup" && (
+          <>
+            <AICard onChange={loadReady} />
+            <PromptCard />
+            <BufferSetupCard onReady={loadReady} />
+            <TuningCard />
+            <ExportCard />
+            <details className="gx-details gx-advanced">
+              <summary>{t("gx.advanced_direct")}</summary>
+              <AutoPostCard />
+            </details>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -180,10 +255,46 @@ function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle })
       setBusy(false);
     }
   };
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [up, setUp] = useState<number | null>(null);
+  const [drag, setDrag] = useState(false);
+  const sendFile = async (f: File | null | undefined) => {
+    if (!f) return;
+    setMsg(null);
+    setUp(0);
+    try {
+      await uploadFile(f, "gaming", "auto", setUp, false, style).promise;
+      setMsg(t("gaming.queued"));
+    } catch (e) {
+      setMsg(String((e as Error).message || e));
+    } finally {
+      setUp(null);
+    }
+  };
   return (
     <div className="card" style={{ padding: 16 }}>
       <h3>{t(kind === "file" ? "gaming.file_title" : "gaming.vod_title")}</h3>
-      <p className="muted small">{t(kind === "file" ? "gaming.file_hint" : "gaming.vod_hint")}</p>
+      <p className="muted small">{t(kind === "file" ? "gx.file_hint" : "gaming.vod_hint")}</p>
+      {kind === "file" && (
+        <div className={`gx-drop ${drag ? "on" : ""}`} role="button" tabIndex={0}
+          onClick={() => fileInput.current?.click()}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileInput.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); sendFile(e.dataTransfer.files?.[0]); }}>
+          {up != null ? (
+            <>
+              <strong>{t("gx.uploading", { p: Math.round(up * 100) })}</strong>
+              <div className="progress" style={{ width: "100%" }}><span style={{ width: `${Math.round(up * 100)}%` }} /></div>
+            </>
+          ) : (
+            <>
+              <strong>{t("gx.drop")}</strong>
+              <span className="small muted">MP4 · MKV · MOV · TS</span>
+            </>
+          )}
+          <input ref={fileInput} type="file" accept="video/*,.mkv,.flv,.ts" hidden onChange={(e) => sendFile(e.target.files?.[0])} />
+        </div>
+      )}
       <label className="field">
         <span className="field-label">{t(kind === "file" ? "gaming.file_path" : "gaming.vod_url")}</span>
         <input
@@ -196,7 +307,7 @@ function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle })
       <button className="btn btn-primary" disabled={busy || !value.trim()} onClick={submit} style={{ marginTop: 8 }}>
         {t("gaming.import")}
       </button>
-      {msg && <p className="small" style={{ marginTop: 8 }}>{msg} {msg === t("gaming.queued") && <a href={href.library}>{t("nav.library")}</a>}</p>}
+      {msg && <p className="small" style={{ marginTop: 8 }} role="status">{msg === t("gaming.queued") ? t("gx.queued") : msg}</p>}
     </div>
   );
 }
@@ -514,7 +625,7 @@ interface AIView {
   effort: string;
 }
 
-function AICard() {
+function AICard({ onChange }: { onChange?: () => void }) {
   const { t } = useI18n();
   const [v, setV] = useState<AIView | null>(null);
   const [keys, setKeys] = useState<Record<string, string>>({});
@@ -528,6 +639,7 @@ function AICard() {
     setMsg(null);
     try {
       setV(await req<AIView>("PUT", "/api/gaming/ai", body));
+      onChange?.();
       return true;
     } catch (e) {
       setMsg(String((e as Error).message || e));
@@ -548,7 +660,7 @@ function AICard() {
   };
   const cloud = v.providers.filter((p) => p.id !== "ollama");
   return (
-    <section className="card" style={{ padding: 16, marginTop: 24 }}>
+    <section className="card gx-card">
       <h3>{t("gaming.ai_title")}</h3>
       <p className="muted small">{t("gaming.ai_hint")}</p>
       <div className="segmented" role="radiogroup" aria-label={t("gaming.ai_title")} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -593,10 +705,28 @@ function AICard() {
           </div>
         ))}
       </div>
-      <label className="check" style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
-        <input type="checkbox" checked={v.fallback} onChange={(e) => put({ fallback: e.target.checked })} />
-        <span>{t("gaming.ai_fallback")}</span>
-      </label>
+      <div className="gx-row" style={{ marginTop: 12, alignItems: "center" }}>
+        <label className="check" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={v.fallback} onChange={(e) => put({ fallback: e.target.checked })} />
+          <span>{t("gaming.ai_fallback")}</span>
+        </label>
+        {v.provider === "anthropic" && (
+          <label className="field" style={{ maxWidth: 220 }}>
+            <span className="field-label">{t("gx.ai_effort")}</span>
+            <select className="select select-sm" value={v.effort} onChange={(e) => put({ effort: e.target.value })}>
+              <option value="low">{t("gx.effort_low")}</option>
+              <option value="medium">{t("gx.effort_medium")}</option>
+              <option value="high">{t("gx.effort_high")}</option>
+            </select>
+          </label>
+        )}
+      </div>
+      <p className="small" style={{ marginTop: 8 }}>
+        <span className={`chip ${v.provider === "ollama" ? "chip-outline" : "chip-success"}`}><span className="dot" />
+          {t("gx.ai_now", { name: v.providers.find((p) => p.id === v.provider)?.label ?? v.provider })}
+        </span>{" "}
+        {v.provider !== "ollama" && <span className="muted">{v.fallback ? t("gx.ai_fallback_on") : t("gx.ai_fallback_off")}</span>}
+      </p>
       {msg && <div className="notice small" role="status" style={{ marginTop: 8 }}>{msg}</div>}
     </section>
   );
@@ -635,7 +765,7 @@ function TuningCard() {
     </label>
   );
   return (
-    <section className="card" style={{ padding: 16, marginTop: 24 }}>
+    <section className="card gx-card">
       <h3>{t("gaming.tuning")}</h3>
       <p className="muted small">{t("gaming.tuning_hint")}</p>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -671,7 +801,7 @@ function ExportCard() {
   const [res, setRes] = useState<{ folder: string; exported: string[]; missing: unknown[] } | null>(null);
   const [busy, setBusy] = useState(false);
   return (
-    <section className="card" style={{ padding: 16, marginTop: 16 }}>
+    <section className="card gx-card">
       <h3>{t("gaming.export_title")}</h3>
       <p className="muted small">{t("gaming.export_hint")}</p>
       <button className="btn btn-primary" disabled={busy} onClick={async () => {
@@ -738,7 +868,7 @@ function AutoPostCard() {
     put({ platforms: { [p]: { ...v.settings.platforms[p], ...body } } });
   const order: APPlatform[] = ["youtube", "tiktok", "reels"];
   return (
-    <section className="card" style={{ padding: 16, marginTop: 16 }}>
+    <section className="card gx-card">
       <h3>{t("autopost.title")}</h3>
       <p className="muted small">{t("autopost.hint", { cap: v.settings.cap })}</p>
       <label className="check" style={{ display: "flex", gap: 8, alignItems: "center" }}>

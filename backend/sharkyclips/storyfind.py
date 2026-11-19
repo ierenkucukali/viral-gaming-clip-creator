@@ -217,7 +217,24 @@ Rules for every story:
 - title: a YouTube Shorts title in English (max 80 characters, no hashtags).
 - why: one English sentence: what happens and why people will watch until the end.
 - score: 0-100, honest (most good clips 55-75, only rare gems 85+).
-"""
+{_extra()}"""
+
+
+def _extra() -> str:
+    """The user's own extra instructions (Gaming page > Setup > AI prompt), appended to the task."""
+    text = str(config.get("story_extra_prompt") or "").strip()[:2000]
+    return f"\nEXTRA INSTRUCTIONS FROM THE CHANNEL OWNER (follow them):\n{text}\n" if text else ""
+
+
+def prompt_preview() -> dict:
+    """The story finder's real prompt with a sample transcript (shown on the Gaming page)."""
+    st = settings()
+    sample = ("L0 [00:00] okay we're finally in GTA 6, let's go\n"
+              "L1 [00:04] wait why is the cop following me  HYPE 41\n"
+              "L2 [00:09] NO NO NO he's got a helicopter  HYPE 88 shout loud +9 dB\n…")
+    meta = {"title": "<video title>", "source": {"uploader": "<channel name>"}}
+    return {"system": SYSTEM, "user": _prompt(meta, sample, 0, 3, st, 8, "Whole video (35:00)."),
+            "extra": str(config.get("story_extra_prompt") or ""), "schema": schema(8)}
 
 
 def _checker(a: int, b: int, lines: list[dict], st: dict):
@@ -378,9 +395,16 @@ def apply(project: Project, result: dict, *, on_progress=None) -> bool:
 
     if llmcloud.active() is None and llm.ollama_exe() is None and llm.server_version(0.5) is None:
         return False
+    t0 = time.perf_counter()
+    used = {"model": None, "cloud": False}
     try:
         with llm.session() as model:
+            from .llmcloud import CloudLLM
+
+            used = {"model": getattr(model, "model", None), "cloud": isinstance(model, CloudLLM)}
             stories = find(project, result, model, on_progress=on_progress)
+            if used["cloud"] and getattr(model, "_local", None) is not None:  # fell back to the local model
+                used = {"model": getattr(model._local, "model", None), "cloud": False, "fallback": True}
     except Exception as exc:  # noqa: BLE001 - the signal candidates stay
         console.print(f"[yellow]Story finder failed, keeping the signal candidates: {exc}[/]")
         return False
@@ -396,5 +420,6 @@ def apply(project: Project, result: dict, *, on_progress=None) -> bool:
     for i, c in enumerate(cands):
         c["rank"], c["id"] = i + 1, f"c{i + 1:02d}"
     result["candidates"] = cands
-    result["stories"] = {"v": STORY_VERSION, "count": len(stories), "settings": st}
+    result["stories"] = {"v": STORY_VERSION, "count": len(stories), "settings": st,
+                         "seconds": round(time.perf_counter() - t0, 1), **used}
     return True

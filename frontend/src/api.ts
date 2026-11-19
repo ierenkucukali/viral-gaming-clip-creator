@@ -1973,10 +1973,12 @@ export function uploadFile(
   language: string,
   onProgress: (fraction: number) => void,
   fullUpload?: boolean,
+  clipStyle?: "streamer" | "direct",
 ): { promise: Promise<Job>; abort: () => void } {
   const xhr = new XMLHttpRequest();
   const q = new URLSearchParams({ filename: file.name, mode, language });
   if (fullUpload !== undefined) q.set("full_upload", String(fullUpload));
+  if (clipStyle) q.set("clip_style", clipStyle);
   const promise = guardHeavy("PUT", "/api/uploads").then(() => new Promise<Job>((resolve, reject) => {
     xhr.open("PUT", `/api/uploads?${q}`);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");

@@ -7,6 +7,101 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.53] - 2026-11-19
+### The gaming clipper, ready to use (local build)
+- **One page, four steps.** Gaming page: **Make clips** (drop a video or paste a YouTube link, pick
+  the clip style, Start) -> **Pick & send** -> **Schedule** -> **Setup**. The page opens by itself
+  when you only make gaming clips.
+- **Clips render by themselves.** After the analysis, the AI's story clips are rendered right
+  away (switch in Setup > The AI prompt), so "add a video" ends with ready 9:16 files.
+- **Send to Buffer.** Pick the clips you like (watch, edit the title and caption), choose
+  Instagram / TikTok / YouTube and press **Send to Buffer**. Every clip gets its own time: by
+  default 10 a day per platform, spread between 10:00 and 23:00, or your fixed times; the number
+  a day is set per platform. Buffer's free plan holds 10 scheduled posts per channel, so the rest
+  wait in the app and go in as soon as there is room. The **Schedule** tab shows every post by day
+  (waiting, in Buffer, posted, failed) with Cancel and Plan again.
+- **Buffer setup with a Test button.** Setup > Buffer: paste the Buffer API key and a free
+  Cloudinary account (Buffer needs each video at a public link; the copy is deleted there after
+  posting), press **Save and test**: the Instagram, TikTok and YouTube channels are linked by
+  themselves. YouTube visibility, category, subscriber notification, Instagram feed + first
+  comment, AI label and hashtags are options.
+- **The AI prompt is visible.** Setup > The AI prompt shows exactly what the AI gets, and you can
+  add your own instructions. The AI card shows which AI is used now, the thinking effort for
+  Claude, and that the local AI takes over when the cloud AI can't be reached.
+- **How long it takes on this PC.** Make clips shows the expected time for 30 min to 10 h videos
+  (with the cloud AI and with the local AI), from this PC's own measurements.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Oyun klip üretici, kullanıma hazır (yerel sürüm)
+- **Tek sayfa, dört adım.** Gaming sayfası: **Klip üret** (videoyu bırak ya da YouTube linkini
+  yapıştır, klip stilini seç, başlat) -> **Seç ve gönder** -> **Takvim** -> **Kurulum**. Sadece
+  oyun klibi yapıyorsan uygulama bu sayfayla açılır.
+- **Klipler kendiliğinden üretilir.** Analizden sonra yapay zekânın hikâye klipleri hemen render
+  edilir; video eklemek hazır 9:16 dosyalarla biter.
+- **Buffer'a gönder.** Beğendiğin klipleri seç (izle, başlığı ve açıklamayı düzenle), Instagram /
+  TikTok / YouTube'u seç ve **Buffer'a gönder**'e bas. Her klip kendi saatini alır: varsayılan
+  olarak her platformda günde 10 tane, 10:00 ile 23:00 arasına yayılmış ya da senin sabit
+  saatlerin; günlük sayı platform başına ayarlanır. Buffer'ın ücretsiz planı kanal başına 10
+  planlı gönderi tutar, kalanlar uygulamada bekler ve yer açıldıkça gider. **Takvim** sekmesi her
+  gönderiyi güne göre gösterir (bekliyor, Buffer'da, paylaşıldı, hata), İptal ve Yeniden planla
+  ile.
+- **Test butonlu Buffer kurulumu.** Kurulum > Buffer: Buffer API anahtarını ve ücretsiz bir
+  Cloudinary hesabını gir (Buffer her videoyu herkese açık bir linkte ister; kopya paylaşımdan
+  sonra silinir), **Kaydet ve test et**'e bas: Instagram, TikTok ve YouTube kanalları kendiliğinden
+  bağlanır.
+- **Yapay zekâ prompt'u görünür.** Kurulum > Yapay zekâ prompt'u, yapay zekânın tam olarak ne
+  aldığını gösterir; kendi talimatlarını ekleyebilirsin. Bulut yapay zekâya ulaşılamazsa yerel
+  model devralır.
+- **Bu bilgisayarda ne kadar sürer.** Klip üret sekmesi 30 dakikadan 10 saate kadar videolar için
+  beklenen süreyi gösterir (bulut ve yerel yapay zekâ ile), bu bilgisayarın kendi ölçümlerinden.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- **Gaming-Seite in vier Schritten:** Clips erstellen -> Auswählen & senden -> Zeitplan -> Einrichtung. Clips werden nach der Analyse automatisch gerendert.
+- **An Buffer senden:** ausgewählte Clips gehen mit eigenen Zeiten (Standard 10 pro Tag und Plattform) an Buffer, das sie auf Instagram, TikTok und YouTube Shorts postet. Einrichtung mit Buffer-API-Schlüssel, kostenlosem Cloudinary-Konto und Test-Knopf.
+- Der KI-Prompt ist sichtbar und erweiterbar; die Seite zeigt, wie lange ein Video auf diesem PC dauert.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- **Gaming oldal négy lépésben:** Klipek készítése -> Kiválasztás és küldés -> Ütemezés -> Beállítás. A klipek az elemzés után maguktól renderelődnek.
+- **Küldés a Buffernek:** a kiválasztott klipek saját időpontot kapnak (alapból napi 10 platformonként), a Buffer közzéteszi őket Instagramon, TikTokon és YouTube Shortson. Beállítás Buffer API-kulccsal, ingyenes Cloudinary-fiókkal és Teszt gombbal.
+- Az MI prompt látható és bővíthető; az oldal megmutatja, mennyi ideig tart egy videó ezen a gépen.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- **Страница Gaming в четыре шага:** Создать клипы -> Выбрать и отправить -> Расписание -> Настройка. Клипы рендерятся сами после анализа.
+- **Отправка в Buffer:** выбранные клипы получают своё время (по умолчанию 10 в день на платформу), Buffer публикует их в Instagram, TikTok и YouTube Shorts. Настройка: ключ Buffer API, бесплатный аккаунт Cloudinary и кнопка «Тест».
+- Промпт ИИ виден и дополняется; страница показывает, сколько видео обрабатывается на этом ПК.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- **صفحة Gaming في أربع خطوات:** إنشاء المقاطع -> الاختيار والإرسال -> الجدول -> الإعداد. تُعرض المقاطع تلقائيًا بعد التحليل.
+- **الإرسال إلى Buffer:** تحصل المقاطع المختارة على أوقاتها (افتراضيًا 10 يوميًا لكل منصة) وينشرها Buffer على Instagram وTikTok وYouTube Shorts. الإعداد بمفتاح Buffer API وحساب Cloudinary مجاني وزر اختبار.
+- موجه الذكاء الاصطناعي ظاهر وقابل للإضافة، والصفحة تعرض مدة معالجة الفيديو على هذا الجهاز.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- **Gaming 页面四步完成：** 制作剪辑 -> 选择并发送 -> 排期 -> 设置。分析完成后剪辑会自动渲染。
+- **发送到 Buffer：** 选中的剪辑各自获得发布时间（默认每个平台每天 10 条），由 Buffer 发布到 Instagram、TikTok 和 YouTube Shorts。设置时填写 Buffer API 密钥和免费的 Cloudinary 账户，并可一键测试。
+- AI 提示词可见且可补充；页面会显示在这台电脑上处理一个视频需要多久。
+
+</details>
+
 ## [1.2.52] - 2026-11-18
 ### Security update
 - **Other websites can't use SharkyClips any more.** Until now, a web page open in your browser

@@ -53,6 +53,9 @@ function EasyTopBar() {
         <span className="brand-name">SharkyClips</span>
       </a>
       <nav className="nav">
+        <a href={href.gaming} aria-current={route.name === "gaming" ? "page" : undefined}>
+          {t("nav.gaming")}
+        </a>
         <a href={href.library} aria-current={route.name === "library" || route.name === "project" ? "page" : undefined}>
           {t("easy.nav_create")}
         </a>
@@ -61,9 +64,6 @@ function EasyTopBar() {
         </a>
         <a href={href.pubqueue} aria-current={route.name === "pubqueue" ? "page" : undefined}>
           {t("nav.pubqueue")}
-        </a>
-        <a href={href.gaming} aria-current={route.name === "gaming" ? "page" : undefined}>
-          {t("nav.gaming")}
         </a>
         <a href={href.settings} aria-current={route.name === "settings" || route.name === "trash" ? "page" : undefined}>
           {t("nav.settings")}
@@ -121,6 +121,9 @@ function TopBar() {
         <span className="brand-name">SharkyClips</span>
       </a>
       <nav className="nav">
+        <a href={href.gaming} aria-current={route.name === "gaming" ? "page" : undefined}>
+          {t("nav.gaming")}
+        </a>
         <a
           href={href.library}
           aria-current={["library", "project", "bestof", "game", "stories"].includes(route.name) ? "page" : undefined}
@@ -142,9 +145,6 @@ function TopBar() {
         </a>
         <a href={href.studio()} aria-current={route.name === "studio" ? "page" : undefined}>
           {t("nav.studio")}
-        </a>
-        <a href={href.gaming} aria-current={route.name === "gaming" ? "page" : undefined}>
-          {t("nav.gaming")}
         </a>
         <a href={href.settings} aria-current={route.name === "settings" || route.name === "trash" ? "page" : undefined}>
           {t("nav.settings")}
@@ -245,6 +245,21 @@ export default function App() {
   const autoWhatsNew = splashDone && !showOnboarding && !!state?.whats_new && !whatsNewClosed;
   const showTour =
     easy && splashDone && !showOnboarding && !autoWhatsNew && !manualWhatsNew && !!ui && !ui.tour_done && route.name === "library";
+  useEffect(() => {
+    // local fork: a gaming-only setup opens on the clipper (Gaming page) instead of the library
+    if (!state) return;
+    const types = state.content_types ?? [];
+    let seen = false;
+    try {
+      seen = sessionStorage.getItem("sc.home") === "1";
+      sessionStorage.setItem("sc.home", "1");
+    } catch {
+      /* private window */
+    }
+    if (!seen && types.length === 1 && types[0] === "gaming" && ["", "#", "#/"].includes(window.location.hash)) {
+      window.location.hash = href.gaming.replace(/^#/, "");
+    }
+  }, [state]);
   const closeWhatsNew = () => {
     if (autoWhatsNew && state?.whats_new) api.whatsNewSeen(state.whats_new).then(set).catch(() => {});
     setWhatsNewClosed(true);
