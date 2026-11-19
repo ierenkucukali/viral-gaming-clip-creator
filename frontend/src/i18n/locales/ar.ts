@@ -3107,6 +3107,11 @@ const ar: Record<string, string> = {
   "buf.send_again": "Send again",
   "buf.daily_cap": "Buffer posts at most {n} a day on this channel on your plan (free plan: YouTube 2, TikTok 25, Instagram 50), so the plan uses {n}. A paid Buffer plan allows 100 on YouTube: press Test after upgrading.",
   "gx.streamer_name": "Streamer name (optional: if the video is from another channel, e.g. a clip channel)",
+  "buf.r2_title": "Video hosting: Cloudflare R2 (recommended, free)",
+  "buf.r2_hint": "Buffer fetches every video from a public link when it posts it. R2: 10 GB free and no download fees. dash.cloudflare.com > R2 > bucket 'sharkyclips' > Settings: enable the Public Development URL; R2 > Manage API tokens: Object Read & Write. Each video is deleted after it was posted.",
+  "buf.r2_bucket": "Bucket name",
+  "buf.r2_public": "Public address (r2.dev)",
+  "buf.alternative": "alternative",
 };
 
 export default ar;

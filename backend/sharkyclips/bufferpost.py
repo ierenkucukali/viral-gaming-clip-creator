@@ -110,6 +110,26 @@ def save_keys(body: dict) -> dict:
                 raise SharkyClipsError("Enter the Cloudinary API key and API secret.",
                                        "Cloudinary console > Settings > API Keys.")
             keys["cloudinary"] = new
+    if "r2" in body:
+        r = body.get("r2") or {}
+        fields = ("account_id", "access_key_id", "secret_access_key", "bucket", "public_url")
+        if not any(str(r.get(f) or "").strip() for f in fields):
+            keys.pop("r2", None)
+        else:
+            old = keys.get("r2") or {}
+            new = {f: str(r.get(f) or "").strip() or old.get(f, "") for f in fields}
+            new["bucket"] = new["bucket"] or "sharkyclips"
+            new["public_url"] = new["public_url"].rstrip("/")
+            if not re.fullmatch(r"[0-9a-f]{32}", new["account_id"] or ""):
+                raise SharkyClipsError("The Cloudflare Account ID looks wrong (32 letters and digits).",
+                                       "Cloudflare > R2 Object Storage: 'Account ID' on the right.")
+            if not new["access_key_id"] or not new["secret_access_key"]:
+                raise SharkyClipsError("Enter the R2 Access Key ID and Secret Access Key.",
+                                       "R2 > Manage API tokens > Create API token (Object Read & Write).")
+            if not re.fullmatch(r"https://[A-Za-z0-9.-]+(/[A-Za-z0-9._~-]*)*", new["public_url"] or ""):
+                raise SharkyClipsError("Paste the bucket's public address (https://pub-….r2.dev).",
+                                       "R2 > your bucket > Settings > Public Development URL > Enable.")
+            keys["r2"] = new
     secretstore.save(_key_path(), keys)
     if "buffer" in body:
         with _lock:
@@ -122,10 +142,18 @@ def save_keys(body: dict) -> dict:
 def keys_view() -> dict:
     k = _keys()
     c = k.get("cloudinary") or {}
+    r = k.get("r2") or {}
+    has_r2 = bool(r.get("account_id") and r.get("access_key_id") and r.get("secret_access_key") and r.get("public_url"))
+    has_cl = bool(c.get("cloud_name") and c.get("api_key") and c.get("api_secret"))
     return {"buffer": _mask(k.get("buffer")), "has_buffer": bool(k.get("buffer")),
             "cloudinary": {"cloud_name": c.get("cloud_name") or None, "api_key": _mask(c.get("api_key")),
                            "has_secret": bool(c.get("api_secret"))},
-            "has_cloudinary": bool(c.get("cloud_name") and c.get("api_key") and c.get("api_secret"))}
+            "r2": {"account_id": _mask(r.get("account_id")), "access_key_id": _mask(r.get("access_key_id")),
+                   "bucket": r.get("bucket") or None, "public_url": r.get("public_url") or None,
+                   "has_secret": bool(r.get("secret_access_key"))},
+            "has_cloudinary": has_cl, "has_r2": has_r2,
+            # where the videos go: R2 when it is set up (no download fees), else Cloudinary
+            "host": "r2" if has_r2 else ("cloudinary" if has_cl else None), "has_host": has_r2 or has_cl}
 
 
 # ===================================================================== settings
@@ -356,6 +384,22 @@ def _cloud() -> dict:
     return c
 
 
+def _host() -> str:
+    """Where the videos are hosted for Buffer: "r2" (preferred) or "cloudinary"."""
+    h = keys_view()["host"]
+    if not h:
+        raise BufferError("No video hosting yet (Buffer needs a public link to each video).",
+                          "Gaming page > Setup > Video hosting: Cloudflare R2 (recommended) or Cloudinary.",
+                          code="NOCLOUD")
+    return h
+
+
+def _r2():
+    from .r2store import R2
+
+    return R2(_keys().get("r2") or {})
+
+
 def _sign(params: dict, secret: str) -> str:
     base = "&".join(f"{k}={params[k]}" for k in sorted(params))
     return hashlib.sha1((base + secret).encode("utf-8")).hexdigest()
@@ -461,11 +505,16 @@ def test() -> dict:
                          "daily_limits": limits}
     except SharkyClipsError as exc:
         out["buffer"] = {"ok": False, "error": str(exc), "hint": getattr(exc, "hint", None)}
+    kv = keys_view()
     try:
-        out["cloudinary"] = cloud_test()
+        if kv["has_r2"]:
+            out["hosting"] = {**_r2().test(), "host": "r2"}
+        else:
+            out["hosting"] = {**cloud_test(), "host": "cloudinary"}
     except SharkyClipsError as exc:
-        out["cloudinary"] = {"ok": False, "error": str(exc), "hint": getattr(exc, "hint", None)}
-    out["ok"] = bool(out["buffer"] and out["buffer"].get("ok") and out["cloudinary"] and out["cloudinary"].get("ok"))
+        out["hosting"] = {"ok": False, "error": str(exc), "hint": getattr(exc, "hint", None)}
+    out["cloudinary"] = out["hosting"]  # older UI
+    out["ok"] = bool(out["buffer"] and out["buffer"].get("ok") and out["hosting"] and out["hosting"].get("ok"))
     return out
 
 
@@ -707,7 +756,7 @@ def send(picks: list[dict], start: str | None = None, wait: bool = False) -> dic
     s = settings()
     if not _keys().get("buffer") or not s["organization_id"]:
         raise SharkyClipsError("Set up Buffer first.", "Gaming page > Setup > Buffer: paste the key, press Save and test.")
-    _cloud()
+    _host()
     begin = _parse(start) if start else None
     if begin is not None and begin.tzinfo is None:
         begin = begin.astimezone()
@@ -896,13 +945,21 @@ def _media(st: dict, it: dict) -> dict:
     m = st["media"].get(key)
     if m and m.get("url") and not m.get("deleted"):
         return {**m, "key": key}
-    src = f
-    if stt.st_size > MAX_UPLOAD_BYTES:
-        src = _smaller(f)
-    pid = re.sub(r"[^a-z0-9_-]+", "-", f"{it['project_id'][:40]}-{it['cid']}-{key[:6]}".lower())
-    up = cloud_upload(src, pid)
+    if _host() == "r2":  # no size limit, no download fees
+        try:
+            up = {**_r2().upload(f), "host": "r2"}
+        except SharkyClipsError as exc:
+            raise BufferError(str(exc), exc.hint, code="CLOUD") from exc
+        where = "Cloudflare R2"
+    else:
+        src = f
+        if stt.st_size > MAX_UPLOAD_BYTES:
+            src = _smaller(f)
+        pid = re.sub(r"[^a-z0-9_-]+", "-", f"{it['project_id'][:40]}-{it['cid']}-{key[:6]}".lower())
+        up = {**cloud_upload(src, pid), "host": "cloudinary"}
+        where = "Cloudinary"
     st["media"][key] = {**up, "file": str(f), "uploaded_at": time.time()}
-    _log(st, "uploaded", f"{f.name} -> Cloudinary ({round((up.get('bytes') or 0) / 1e6, 1)} MB)")
+    _log(st, "uploaded", f"{f.name} -> {where} ({round((up.get('bytes') or 0) / 1e6, 1)} MB)")
     return {**st["media"][key], "key": key}
 
 
@@ -1006,7 +1063,8 @@ def _cleanup(st: dict, s: dict, now: datetime) -> list[str]:
         last = max((_parse(i.get("sent_at")) or datetime.fromtimestamp(i.get("updated_at") or 0, timezone.utc)) for i in users)
         if now - last < timedelta(minutes=30):
             continue
-        if cloud_delete(m["public_id"]):
+        gone = _r2().delete(m["object"]) if m.get("host") == "r2" else cloud_delete(m["public_id"])
+        if gone:
             m["deleted"] = time.time()
             acts.append(f"buffer: media {key} deleted")
     return acts

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -387,3 +388,92 @@ def test_test_reads_buffers_queue_limit_and_daily_limits(env):
     env.net.plan_limit = 5000  # after upgrading to a paid plan
     B.test()
     assert B.settings()["queue_cap"] == B.SEND_MAX
+
+
+# ===================================================================== Cloudflare R2 hosting (1.2.57)
+
+
+class FakeR2:
+    def __init__(self):
+        self.objects: dict[str, bytes] = {}
+        self.calls: list[tuple[str, str]] = []
+        self.public_ok = True
+
+    def request(self, method, url, data=None, headers=None, timeout=None):
+        assert timeout and url.startswith("https://" + "0" * 31 + "a.r2.cloudflarestorage.com/sharkyclips/")
+        assert headers["Authorization"].startswith("AWS4-HMAC-SHA256 Credential=r2key/")
+        assert "/auto/s3/aws4_request" in headers["Authorization"]
+        key = url.split("/sharkyclips/", 1)[1]
+        self.calls.append((method, key))
+        if method == "PUT":
+            body = data if isinstance(data, bytes) else data.read()
+            assert headers["x-amz-content-sha256"] == __import__("hashlib").sha256(body).hexdigest()
+            self.objects[key] = body
+            return Resp(200, {})
+        if method == "DELETE":
+            self.objects.pop(key, None)
+            return Resp(204, {})
+        raise AssertionError(method)
+
+    def get(self, url, timeout=None):
+        key = url.split("r2.dev/", 1)[1]
+        r = Resp(200 if self.public_ok and key in self.objects else 404, {})
+        r.content = self.objects.get(key, b"")
+        return r
+
+
+R2_KEYS = {"account_id": "0" * 31 + "a", "access_key_id": "r2key", "secret_access_key": "r2secret",
+           "bucket": "sharkyclips", "public_url": "https://pub-abc.r2.dev/"}
+
+
+@pytest.fixture
+def r2(env, monkeypatch):
+    from sharkyclips import r2store
+
+    fake = FakeR2()
+    monkeypatch.setattr(r2store, "_http", lambda: fake)
+    B.save_keys({"r2": R2_KEYS})
+    return fake
+
+
+def test_r2_signature_matches_the_aws_example():
+    from sharkyclips import r2store as R
+
+    h = R.sign("GET", "examplebucket.s3.amazonaws.com", "/test.txt", {}, {"Range": "bytes=0-9"}, R.EMPTY_SHA,
+               "AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", region="us-east-1",
+               now=datetime(2013, 5, 24, tzinfo=timezone.utc))
+    assert h["Authorization"].endswith("Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41")
+
+
+def test_r2_is_preferred_and_buffer_gets_its_public_link(env, r2):
+    v = B.keys_view()
+    assert v["host"] == "r2" and v["has_r2"] and "r2secret" not in json.dumps(v)
+    B.test()
+    B.send(_picks(2), wait=True)
+    assert env.net.uploads == []  # nothing to Cloudinary
+    puts = [k for m, k in r2.calls if m == "PUT" and k.endswith(".mp4")]
+    assert len(puts) == 2 and all(re.fullmatch(r"sc/[0-9a-f]{32}\.mp4", k) for k in puts)  # unguessable names
+    urls = {c["assets"][0]["video"]["url"] for c in env.net.created}
+    assert urls == {f"https://pub-abc.r2.dev/{k}" for k in puts}
+    for p in env.net.posts.values():
+        p.update(status="sent", sentAt="2026-11-19T10:00:00Z")
+    later = datetime.now(timezone.utc) + timedelta(days=2)
+    B.tick(now=later)
+    B.tick(now=later + timedelta(hours=1))
+    assert sorted(k for m, k in r2.calls if m == "DELETE" and k.endswith(".mp4")) == sorted(puts) and r2.objects == {}
+
+
+def test_r2_test_checks_upload_public_link_and_cleans_up(env, r2):
+    r = B.test()
+    assert r["hosting"]["ok"] and r["hosting"]["host"] == "r2" and r["ok"]
+    assert r2.objects == {}  # the test file is deleted again
+    r2.public_ok = False
+    r = B.test()
+    assert not r["hosting"]["ok"] and "Public Development URL" in r["hosting"]["hint"]
+
+
+def test_r2_keys_are_checked():
+    with pytest.raises(SharkyClipsError, match="Account ID"):
+        B.save_keys({"r2": {**R2_KEYS, "account_id": "nope"}})
+    with pytest.raises(SharkyClipsError, match="public address"):
+        B.save_keys({"r2": {**R2_KEYS, "public_url": "pub-abc.r2.dev"}})

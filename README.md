@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.56-1F6FE5" alt="Version 1.2.56">
+  <img src="https://img.shields.io/badge/version-1.2.57-1F6FE5" alt="Version 1.2.57">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0E1A33" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/runs%20on-your%20own%20PC-2ea043" alt="Runs on your own PC">
   <img src="https://img.shields.io/badge/AI-Claude%20%7C%20Gemini%20%7C%20local%20Ollama-D9B56A" alt="Claude, Gemini or local AI">
@@ -152,7 +152,7 @@ Open **Gaming → Setup**:
 | or **Gemini API key** | [aistudio.google.com](https://aistudio.google.com) → Get API key | Free tier available |
 | or nothing | — | The local Ollama model (free, weaker headlines) |
 | **Buffer API key** | [buffer.com](https://buffer.com) (free plan) → connect TikTok, Instagram (Business/Creator) and YouTube → [Settings → API](https://publish.buffer.com/settings/api) | Posts your clips |
-| **Cloudinary** cloud name, API key and secret | [cloudinary.com](https://cloudinary.com) (free, no card) → Dashboard, then Settings → API Keys | Buffer fetches every video from a public link; each copy is deleted after it was posted |
+| **Cloudflare R2** account ID, token (Access Key ID + Secret), public r2.dev address | [dash.cloudflare.com](https://dash.cloudflare.com) → R2 → bucket `sharkyclips` → Public Development URL on → Manage API tokens (Object Read & Write) | Buffer fetches every video from a public link when it posts; R2 has 10 GB free and no download fees. Each copy is deleted after it was posted (Cloudinary works as an alternative) |
 
 Press **Save and test**. Green ticks mean you are ready. Then open the **Schedule** tab, set your
 posting plan and press **Save the plan**.

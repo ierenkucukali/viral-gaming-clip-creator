@@ -8,7 +8,13 @@ day; the app uses about 2-3 per post).
 
 1. **Buffer:** sign up at <https://buffer.com>, connect Instagram (Business or Creator account), TikTok
    and YouTube. Then <https://publish.buffer.com/settings/api> > create an API key.
-2. **Video hosting (Cloudinary, free, no card):** Buffer's API can't take a file, it fetches each
+2. **Video hosting: Cloudflare R2 (recommended, 1.2.57):** 10 GB free and no download fees.
+   dash.cloudflare.com > R2 Object Storage > enable (a card may be asked; nothing is charged under
+   10 GB) > Create bucket `sharkyclips` > Settings > Public Development URL > Enable (copy the
+   `https://pub-….r2.dev` address) > back on R2: copy the Account ID, then Manage API tokens >
+   Create Account API token (Object Read & Write, bucket `sharkyclips`) > copy the Access Key ID and
+   Secret Access Key. Paste the four values in the app (Setup > Buffer > Video hosting).
+   **Alternative: Cloudinary (free, no card):** Buffer's API can't take a file, it fetches each
    video from a public link. Sign up at <https://cloudinary.com>, copy the **Cloud name** (Dashboard)
    and an **API key + API secret** (Settings > API Keys). Each clip is uploaded right before it goes
    into Buffer and deleted after every platform posted it (max 100 MB per clip on the free plan; a

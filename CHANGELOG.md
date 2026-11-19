@@ -7,6 +7,62 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.57] - 2026-11-19
+### Cloudflare R2 for the Buffer videos
+- **Video hosting on Cloudflare R2 (recommended).** Buffer fetches every video from a public link
+  when it posts it. R2 gives 10 GB free and has no download fees, so 15 posts a day on three
+  platforms stays free. Setup > Buffer > Video hosting: paste the Account ID, the R2 token's Access
+  Key ID and Secret, and the bucket's public r2.dev address, then Save and test (it uploads a test
+  file, reads it back through the public address and deletes it).
+- Every video gets an unguessable name and is deleted after it was posted. Cloudinary still works as
+  the alternative.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Buffer videoları için Cloudflare R2
+- **Videolar Cloudflare R2'de (önerilen).** Buffer her videoyu paylaşırken herkese açık bir linkten
+  çeker. R2'de 10 GB ücretsiz ve indirme ücreti yok; günde 15 paylaşım × 3 platform ücretsiz kalır.
+  Kurulum > Buffer > Video depolama: Account ID, R2 anahtarının Access Key ID ve Secret'ı ve bucket'ın
+  r2.dev adresini yapıştır, Kaydet ve test et (bir test dosyası yükler, açık adresten okur ve siler).
+- Her video tahmin edilemeyen bir ad alır ve paylaşıldıktan sonra silinir. Cloudinary alternatif
+  olarak çalışmaya devam eder.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Videos für Buffer jetzt auf Cloudflare R2 (empfohlen): 10 GB gratis und keine Download-Gebühren. Einrichtung > Buffer > Video-Hosting: Account ID, Access Key ID, Secret und die öffentliche r2.dev-Adresse eintragen, dann Speichern und testen. Cloudinary bleibt als Alternative.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- A Buffer videói most a Cloudflare R2-n (ajánlott): 10 GB ingyen, letöltési díj nélkül. Beállítás > Buffer > Videótárhely: Account ID, Access Key ID, Secret és a nyilvános r2.dev cím, majd Mentés és teszt. A Cloudinary alternatívaként megmarad.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Видео для Buffer теперь в Cloudflare R2 (рекомендуется): 10 ГБ бесплатно и без платы за скачивание. Настройка > Buffer > Хостинг видео: Account ID, Access Key ID, Secret и публичный адрес r2.dev, затем «Сохранить и проверить». Cloudinary остаётся как альтернатива.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- فيديوهات Buffer الآن على Cloudflare R2 (موصى به): 10 غيغابايت مجانًا وبلا رسوم تنزيل. الإعداد > Buffer > استضافة الفيديو: أدخل Account ID وAccess Key ID وSecret وعنوان r2.dev العام، ثم احفظ واختبر. يبقى Cloudinary بديلاً.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- Buffer 的视频现在可以放在 Cloudflare R2（推荐）：10 GB 免费，而且下载不收费，每天三个平台各发 15 条也不花钱。在“设置 > Buffer > 视频托管”中填写 Account ID、R2 令牌的 Access Key ID 和 Secret 以及存储桶的公开 r2.dev 地址，然后点“保存并测试”。每个视频发布后都会被删除，Cloudinary 仍可作为备选。
+
+</details>
+
 ## [1.2.56] - 2026-11-19
 ### Better captions, Buffer plan limits, streamer name
 - **AI description and hashtags go to Buffer.** With "extra titles + description per clip" on, every

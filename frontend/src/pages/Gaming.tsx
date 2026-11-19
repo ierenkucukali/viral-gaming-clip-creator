@@ -101,7 +101,7 @@ export default function Gaming() {
   const [ready, setReady] = useState<{ ai: string; buffer: boolean } | null>(null);
   const loadReady = useCallback(() => {
     Promise.all([req<AIView>("GET", "/api/gaming/ai"), req<BView>("GET", "/api/buffer")])
-      .then(([a, b]) => setReady({ ai: a.provider, buffer: b.keys.has_buffer && b.keys.has_cloudinary && !!b.settings.organization_id }))
+      .then(([a, b]) => setReady({ ai: a.provider, buffer: b.keys.has_buffer && b.keys.has_host && !!b.settings.organization_id }))
       .catch(() => undefined);
   }, []);
   useEffect(loadReady, [loadReady, tab]);

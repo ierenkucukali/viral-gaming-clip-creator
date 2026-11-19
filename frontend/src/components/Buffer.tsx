@@ -38,7 +38,9 @@ export interface BItem {
 }
 export interface BView {
   settings: BSettings;
-  keys: { buffer: string | null; has_buffer: boolean; has_cloudinary: boolean;
+  keys: { buffer: string | null; has_buffer: boolean; has_cloudinary: boolean; has_r2: boolean; has_host: boolean;
+    host: "r2" | "cloudinary" | null;
+    r2: { account_id: string | null; access_key_id: string | null; bucket: string | null; public_url: string | null; has_secret: boolean };
     cloudinary: { cloud_name: string | null; api_key: string | null; has_secret: boolean } };
   platforms: Record<BPlatform, { label: string; enabled: boolean; per_day: number; channel: string; channel_name: string;
     scheduled: number; sent: number; errors: number; room: number | null; in_buffer: number | null;
@@ -94,6 +96,9 @@ export function BufferSetupCard({ onReady }: { onReady?: () => void }) {
   const { v, setV } = useBuffer();
   const [key, setKey] = useState("");
   const [cloud, setCloud] = useState({ cloud_name: "", api_key: "", api_secret: "" });
+  const R2_EMPTY = { account_id: "", access_key_id: "", secret_access_key: "", bucket: "sharkyclips", public_url: "" };
+  const [r2, setR2] = useState(R2_EMPTY);
+  const r2Typed = !!(r2.account_id || r2.access_key_id || r2.secret_access_key || r2.public_url);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [test, setTest] = useState<any>(null);
@@ -113,9 +118,11 @@ export function BufferSetupCard({ onReady }: { onReady?: () => void }) {
       const body: Record<string, unknown> = {};
       if (key.trim()) body.buffer = key.trim();
       if (cloud.cloud_name || cloud.api_key || cloud.api_secret) body.cloudinary = cloud;
+      if (r2Typed) body.r2 = r2;
       setV(await req<BView>("PUT", "/api/buffer/keys", body));
       setKey("");
       setCloud({ cloud_name: "", api_key: "", api_secret: "" });
+      setR2(R2_EMPTY);
       await runTest();
     } catch (e) {
       setMsg({ ok: false, text: errText(e) });
@@ -142,7 +149,7 @@ export function BufferSetupCard({ onReady }: { onReady?: () => void }) {
     <section className="card gx-card">
       <div className="gx-card-head">
         <h3>{t("buf.setup_title")}</h3>
-        <StatusChip ok={v.keys.has_buffer && v.keys.has_cloudinary && !!s.organization_id} t={t} />
+        <StatusChip ok={v.keys.has_buffer && v.keys.has_host && !!s.organization_id} t={t} />
       </div>
       <p className="muted small">{t("buf.setup_hint")}</p>
       <div className="gx-grid2">
@@ -157,36 +164,72 @@ export function BufferSetupCard({ onReady }: { onReady?: () => void }) {
           </label>
         </div>
         <div className="gx-sub">
-          <strong>2 · {t("buf.cloud_title")}</strong>
-          <p className="muted small">{t("buf.cloud_hint")}</p>
-          {v.keys.cloudinary.cloud_name && (
-            <div className="small mono">{v.keys.cloudinary.cloud_name} · {v.keys.cloudinary.api_key}</div>
+          <strong>2 · {t("buf.r2_title")}</strong>
+          <p className="muted small">{t("buf.r2_hint")}</p>
+          {v.keys.r2.public_url && (
+            <div className="small mono">{v.keys.r2.bucket} · {v.keys.r2.public_url}{v.keys.host === "r2" ? " ✓" : ""}</div>
           )}
           <div className="gx-row">
             <label className="field">
-              <span className="field-label">{t("buf.cloud_name")}</span>
-              <input className="input input-sm" autoComplete="off" value={cloud.cloud_name}
-                onChange={(e) => setCloud({ ...cloud, cloud_name: e.target.value })} />
+              <span className="field-label">Account ID</span>
+              <input className="input input-sm" autoComplete="off" value={r2.account_id}
+                onChange={(e) => setR2({ ...r2, account_id: e.target.value })} />
             </label>
             <label className="field">
-              <span className="field-label">{t("buf.cloud_key")}</span>
-              <input className="input input-sm" autoComplete="off" value={cloud.api_key}
-                onChange={(e) => setCloud({ ...cloud, api_key: e.target.value })} />
-            </label>
-            <label className="field">
-              <span className="field-label">{t("buf.cloud_secret")}</span>
-              <input className="input input-sm" type="password" autoComplete="off" value={cloud.api_secret}
-                onChange={(e) => setCloud({ ...cloud, api_secret: e.target.value })} />
+              <span className="field-label">Access Key ID</span>
+              <input className="input input-sm" autoComplete="off" value={r2.access_key_id}
+                onChange={(e) => setR2({ ...r2, access_key_id: e.target.value })} />
             </label>
           </div>
+          <div className="gx-row">
+            <label className="field">
+              <span className="field-label">Secret Access Key</span>
+              <input className="input input-sm" type="password" autoComplete="off" value={r2.secret_access_key}
+                onChange={(e) => setR2({ ...r2, secret_access_key: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="field-label">{t("buf.r2_bucket")}</span>
+              <input className="input input-sm" autoComplete="off" value={r2.bucket}
+                onChange={(e) => setR2({ ...r2, bucket: e.target.value })} />
+            </label>
+          </div>
+          <label className="field">
+            <span className="field-label">{t("buf.r2_public")}</span>
+            <input className="input input-sm" autoComplete="off" placeholder="https://pub-xxxxxxxx.r2.dev" value={r2.public_url}
+              onChange={(e) => setR2({ ...r2, public_url: e.target.value })} />
+          </label>
+          <details className="gx-details">
+            <summary className="small">{t("buf.cloud_title")} ({t("buf.alternative")})</summary>
+            <p className="muted small">{t("buf.cloud_hint")}</p>
+            {v.keys.cloudinary.cloud_name && (
+              <div className="small mono">{v.keys.cloudinary.cloud_name} · {v.keys.cloudinary.api_key}{v.keys.host === "cloudinary" ? " ✓" : ""}</div>
+            )}
+            <div className="gx-row">
+              <label className="field">
+                <span className="field-label">{t("buf.cloud_name")}</span>
+                <input className="input input-sm" autoComplete="off" value={cloud.cloud_name}
+                  onChange={(e) => setCloud({ ...cloud, cloud_name: e.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field-label">{t("buf.cloud_key")}</span>
+                <input className="input input-sm" autoComplete="off" value={cloud.api_key}
+                  onChange={(e) => setCloud({ ...cloud, api_key: e.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field-label">{t("buf.cloud_secret")}</span>
+                <input className="input input-sm" type="password" autoComplete="off" value={cloud.api_secret}
+                  onChange={(e) => setCloud({ ...cloud, api_secret: e.target.value })} />
+              </label>
+            </div>
+          </details>
         </div>
       </div>
       <div className="gx-actions">
-        <button className="btn btn-primary" disabled={busy || (!key.trim() && !cloud.cloud_name && !cloud.api_key && !cloud.api_secret)}
+        <button className="btn btn-primary" disabled={busy || (!key.trim() && !cloud.cloud_name && !cloud.api_key && !cloud.api_secret && !r2Typed)}
           onClick={saveKeys}>{t("buf.save_test")}</button>
         <button className="btn" disabled={busy || !v.keys.has_buffer} onClick={runTest}>{t("buf.test")}</button>
-        {(v.keys.has_buffer || v.keys.has_cloudinary) && (
-          <button className="btn btn-ghost btn-sm" onClick={async () => setV(await req<BView>("PUT", "/api/buffer/keys", { buffer: "", cloudinary: {} }))}>
+        {(v.keys.has_buffer || v.keys.has_cloudinary || v.keys.has_r2) && (
+          <button className="btn btn-ghost btn-sm" onClick={async () => setV(await req<BView>("PUT", "/api/buffer/keys", { buffer: "", cloudinary: {}, r2: {} }))}>
             {t("buf.forget")}
           </button>
         )}
@@ -198,9 +241,10 @@ export function BufferSetupCard({ onReady }: { onReady?: () => void }) {
           <li className={test.buffer?.ok ? "ok" : "bad"}>
             Buffer: {test.buffer?.ok ? `${test.buffer.organization} · ${channels.length} ${t("buf.channels")}` : `${test.buffer?.error ?? ""} ${test.buffer?.hint ?? ""}`}
           </li>
-          <li className={test.cloudinary?.ok ? "ok" : "bad"}>
-            Cloudinary: {test.cloudinary?.ok ? `${test.cloudinary.plan ?? "OK"}${test.cloudinary.credits_limit ? ` · ${test.cloudinary.credits_used}/${test.cloudinary.credits_limit} credits` : ""}`
-              : `${test.cloudinary?.error ?? ""} ${test.cloudinary?.hint ?? ""}`}
+          <li className={test.hosting?.ok ? "ok" : "bad"}>
+            {test.hosting?.host === "r2" ? "Cloudflare R2" : "Cloudinary"}: {test.hosting?.ok
+              ? `${test.hosting.plan ?? "OK"}${test.hosting.credits_limit ? ` · ${test.hosting.credits_used}/${test.hosting.credits_limit} credits` : ""}`
+              : `${test.hosting?.error ?? ""} ${test.hosting?.hint ?? ""}`}
           </li>
         </ul>
       )}
@@ -331,7 +375,7 @@ export function BufferPicker({ goSetup }: { goSetup: () => void }) {
     && (!onlyNew || !isSent(c)));
   const k = (c: BClip) => `${c.project_id}/${c.cid}`;
   const picked = shown.filter((c) => sel[k(c)]);
-  const ready = !!v && v.keys.has_buffer && v.keys.has_cloudinary && !!v.settings.organization_id;
+  const ready = !!v && v.keys.has_buffer && v.keys.has_host && !!v.settings.organization_id;
   const activePlats = B_PLATFORMS.filter((p) => plats[p] && v?.settings.platforms[p]);
   const start = startMode === "at" ? startAt : "";
   const platKey = activePlats.join(",");
