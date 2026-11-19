@@ -3111,6 +3111,16 @@ const zh: Record<string, string> = {
   "buf.saved_keep": "Saved ✓ (leave empty to keep it)",
   "gx.style_both": "Both: every clip in both looks",
   "gx.style_both_hint": "Analysed once (the same stories, headlines and captions), then rendered twice: the streamer's camera on top AND the whole video in the middle. Two clips per story, no extra AI cost.",
+  "gx.trim_first": "Let me trim the video before clipping (pick the hours to use)",
+  "gx.trim_title": "Pick the part to clip",
+  "gx.trim_hint": "The video is downloaded. Choose where clipping starts and ends; the rest is ignored (and removed from this PC). The estimate below is for the part you picked.",
+  "gx.trim_from": "From",
+  "gx.trim_to": "To",
+  "gx.trim_selected": "Selected: {len}",
+  "gx.trim_est": "about {stories} stories → {clips} clips · about {time} on this PC",
+  "gx.trim_start": "Start clipping this part",
+  "gx.trim_whole": "Use the whole video",
+  "stage.trimming": "Cutting the video",
 };
 
 export default zh;

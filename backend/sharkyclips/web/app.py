@@ -174,6 +174,63 @@ def submit_highlights(project_id: str, mode: str | None = None, force: bool = Fa
     return jobs.submit("highlights", "gpu", project_id, {"mode": mode, "force": force}, run, then)
 
 
+def submit_trim(project_id: str, start: float, end: float) -> Job:
+    """Local fork: keep only start..end of the source (stream copy, seconds), extract the audio of
+    that part again (so the transcript matches the cut picture exactly), then clip it."""
+    project = get_project(project_id)
+    meta = project.load_meta()
+    duration = float(meta.get("duration") or 0)
+    start = max(0.0, float(start))
+    end = min(duration, float(end)) if duration else float(end)
+    if end - start < 60:
+        raise SharkyClipsError("Pick at least 1 minute of the video.")
+
+    def run(job: Job):
+        from ..audio import extract_audio, probe
+
+        p = get_project(project_id)
+        src = p.source_path
+        if src is None:
+            raise SharkyClipsError("The video file of this project is missing.")
+        whole = start <= 1 and (not duration or end >= duration - 1)
+        if not whole:
+            jobs.update(job, stage="trimming", progress=None)
+            tmp = p.dir / f"trimmed_part{src.suffix}"
+            cmd = [require_tool("ffmpeg"), "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}",
+                   "-i", str(src), "-t", f"{end - start:.3f}", "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy",
+                   "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", str(tmp)]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=7200, **no_window())
+            if r.returncode != 0 or not tmp.is_file() or tmp.stat().st_size < 1024:
+                tmp.unlink(missing_ok=True)
+                raise SharkyClipsError(f"Cutting the video failed: {(r.stderr or '').strip()[:200]}")
+            os.replace(tmp, src)
+            p.audio_path.unlink(missing_ok=True)
+            for name in ("chat.json", "hype_curve.json"):  # their times belong to the whole video
+                (p.dir / name).unlink(missing_ok=True)
+            shutil.rmtree(p.cache_dir, ignore_errors=True)
+            info = probe(src)
+            jobs.update(job, stage="extracting_audio", progress=0)
+            total = float(info.get("duration") or (end - start))
+            extract_audio(src, p.audio_path, total,
+                          on_progress=lambda secs: jobs.update(job, progress=min(1.0, secs / max(total, 1.0))))
+            m = p.load_meta()
+            m.update(duration=info.get("duration") or (end - start), source_size_bytes=src.stat().st_size,
+                     trimmed={"start": round(start, 2), "end": round(end, 2), "original_duration": duration})
+            p.save_meta(m)
+        m = p.load_meta()
+        m.pop("awaiting_trim", None)
+        p.save_meta(m)
+        return {"start": start, "end": end, "whole": whole}
+
+    def then(_job: Job):
+        p = get_project(project_id)
+        if not _playable(p) and not _proxy_path(p).is_file():
+            submit_proxy(project_id)
+        submit_transcribe(project_id, p.load_meta().get("import_language") or "auto")
+
+    return jobs.submit("import", "io", project_id, {"trim": [start, end]}, run, then)
+
+
 def submit_twin(project_id: str) -> None:
     """Local fork: a "both styles" video gets its direct-style twin (same stories + captions), whose
     clips then render by themselves. Nothing for other projects."""
@@ -349,6 +406,12 @@ def submit_import(source: str, mode: str, language: str, title: str,
     def then(job: Job):
         pid = job.result["project_id"]
         project = get_project(pid)
+        if (extra or {}).get("trim_first"):
+            # local fork (Gaming page): wait for the user to pick the part to clip (submit_trim)
+            meta = project.load_meta()
+            meta.update(awaiting_trim=True, import_language=language)
+            project.save_meta(meta)
+            return
         try:  # 1.2.51: "Upload the full video to YouTube" (the import's switch, on by default)
             from .. import fullvideo
 
@@ -1618,6 +1681,8 @@ def api_create(body: dict, request: Request) -> dict:
         extra = {**(extra or {}), "clip_style": body["clip_style"]}
     if str(body.get("streamer") or "").strip():
         extra = {**(extra or {}), "streamer": str(body["streamer"]).strip()[:60]}
+    if body.get("trim_first"):  # local fork: pick the part to clip before the analysis
+        extra = {**(extra or {}), "trim_first": True}
     return submit_import(source, mode, language, title, extra=extra).to_dict()
 
 
@@ -1625,7 +1690,7 @@ def api_create(body: dict, request: Request) -> dict:
 async def api_upload(request: Request, filename: str = Query(...), mode: str = Query("gaming"),
                      language: str = Query("auto"), easy: bool = Query(False),
                      full_upload: bool | None = Query(None), clip_style: str | None = Query(None),
-                     streamer: str | None = Query(None)) -> dict:
+                     streamer: str | None = Query(None), trim_first: bool = Query(False)) -> dict:
     """Raw file upload (streamed straight to disk - works for multi-GB stream files).
     easy=true: an Easy mode project (mode "auto" = detect the content type)."""
     mode_auto = mode == "auto"
@@ -1678,6 +1743,8 @@ async def api_upload(request: Request, filename: str = Query(...), mode: str = Q
         extra["clip_style"] = clip_style
     if streamer and streamer.strip():
         extra["streamer"] = streamer.strip()[:60]
+    if trim_first:
+        extra["trim_first"] = True
     return submit_import(str(dest), mode, language, name, cleanup=dest, extra=extra or None).to_dict()
 
 

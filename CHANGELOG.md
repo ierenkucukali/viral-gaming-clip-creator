@@ -7,6 +7,58 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.60] - 2026-11-19
+### Trim a long video before clipping
+- **Pick the part to clip.** With "Let me trim the video before clipping" (Make clips, on by default)
+  the analysis waits after the download: a card shows frames at the start and end, sliders and
+  h:mm:ss boxes, and a live estimate for the part you picked (stories, clips and the time on this
+  PC). "Start clipping this part" keeps only that part (no re-encoding, seconds) and starts the
+  analysis; "Use the whole video" skips the cut.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Uzun videoyu klipten önce kırp
+- **Kliplenecek kısmı seç.** "Klipten önce videoyu kırpayım" açıkken (Klip üret, varsayılan açık)
+  analiz indirmeden sonra bekler: bir kart başlangıç ve bitiş karelerini, kaydırıcıları ve s:dd:ss
+  kutularını, seçtiğin kısım için canlı tahmini (hikâye, klip ve bu bilgisayardaki süre) gösterir.
+  "Bu kısmı klipler" sadece o kısmı tutar (yeniden kodlama yok, saniyeler) ve analizi başlatır.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Lange Videos vor dem Clippen zuschneiden: nach dem Download Start und Ende wählen (Schieberegler, Vorschaubilder), mit Live-Schätzung von Clips und Dauer. Nur dieser Teil wird analysiert.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- Hosszú videók vágása klippelés előtt: letöltés után válaszd ki az elejét és végét (csúszkák, előnézeti képek), élő becsléssel a klipekről és az időről. Csak ez a rész kerül elemzésre.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Обрезка длинного видео перед нарезкой: после загрузки выберите начало и конец (ползунки, кадры) с живой оценкой клипов и времени. Анализируется только этот фрагмент.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- قص الفيديو الطويل قبل التقطيع: بعد التنزيل اختر البداية والنهاية (منزلقات وصور معاينة) مع تقدير مباشر لعدد المقاطع والوقت. يُحلَّل هذا الجزء فقط.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- 剪辑前先裁剪长视频：下载完成后，用滑块和预览帧选择开始和结束位置，并实时显示所选部分大约会产生多少故事和剪辑、在这台电脑上需要多久。点击“开始剪辑这一段”后只保留该部分（不重新编码，几秒完成）并开始分析。
+
+</details>
+
 ## [1.2.59] - 2026-11-19
 ### Both clip styles from one video
 - **New clip style "Both".** The video is analysed once (the same stories, headlines and captions),

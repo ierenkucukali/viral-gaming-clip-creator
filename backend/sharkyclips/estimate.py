@@ -80,7 +80,7 @@ def clips_for(minutes: float) -> int:
     return max(2, min(st["count"], round(minutes / 60 * st["per_hour"] * 2 / 3)))
 
 
-def plan(minutes: float, cloud: bool, streamer: bool, r: dict) -> dict:
+def plan(minutes: float, cloud: bool, streamer: bool, r: dict, both: bool = False) -> dict:
     n = clips_for(minutes)
     ideal = float(((config.get("mode_tuning") or {}).get("gaming") or {}).get("clip_ideal") or 55)
     st = {"transcribe": 15 + minutes * 60 / r["transcribe_rtf"],
@@ -90,8 +90,8 @@ def plan(minutes: float, cloud: bool, streamer: bool, r: dict) -> dict:
           "facecam": (r["facecam_s"] + n * r["facecam_s_per_clip"]) if streamer else 0.0,
           "package": (n * (r["package_cloud_s_per_clip"] if cloud else r["package_local_s_per_clip"])
                       if config.get("story_package") is True else 0.0),
-          "render": n * ideal * r["render_s_per_s"]}
-    return {"minutes": minutes, "clips": n, "stages": {k: round(v) for k, v in st.items()},
+          "render": n * ideal * r["render_s_per_s"] * (2 if both else 1)}
+    return {"minutes": minutes, "clips": n * (2 if both else 1), "stories": n, "stages": {k: round(v) for k, v in st.items()},
             "total_s": round(sum(st.values())), "download_gb": round(minutes / 60 * GB_PER_HOUR_1080P60, 1)}
 
 
@@ -107,3 +107,13 @@ def view() -> dict:
             "rows": [{"minutes": mm, "now": plan(mm, cloud, style != "direct", r),
                       "local": plan(mm, False, style != "direct", r), "cloud": plan(mm, True, style != "direct", r)}
                      for mm in SIZES_MIN]}
+
+
+def for_minutes(minutes: float, style: str | None = None) -> dict:
+    """The estimate for one video of `minutes` (the trim step shows it while you move the handles)."""
+    from . import llmcloud
+
+    r = {**DEFAULTS, **measured()}
+    style = style or str(config.get("clip_style") or "streamer")
+    p = plan(max(1.0, float(minutes)), llmcloud.active() is not None, style != "direct", r, both=style == "both")
+    return {**p, "style": style, "cloud": llmcloud.active() is not None}

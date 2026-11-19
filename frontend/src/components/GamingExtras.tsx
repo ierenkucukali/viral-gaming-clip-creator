@@ -1,7 +1,7 @@
 // Local fork: Gaming page helpers: what is running now, how long a video takes on this PC, and the
 // AI prompt (visible + the owner's extra instructions).
 import { useEffect, useState } from "react";
-import { req } from "../api";
+import { req, urls } from "../api";
 import { useI18n } from "../i18n";
 import { isActive, useJobs } from "../jobs";
 import { jobLabel } from "./ui";
@@ -155,6 +155,123 @@ export function PromptCard() {
         <summary>{t("gx.prompt_package")}</summary>
         <pre className="gx-pre">{p.package_system}</pre>
       </details>
+    </section>
+  );
+}
+
+
+// ===================================================================== trim before clipping
+
+interface TrimVideo { id: string; title: string; duration: number; style: string; streamer: string | null }
+
+const hms = (t: number) => {
+  const s = Math.max(0, Math.round(t));
+  return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+};
+const parseHms = (v: string): number | null => {
+  const p = v.trim().split(":").map((x) => Number(x));
+  if (!p.length || p.some((x) => !Number.isFinite(x) || x < 0)) return null;
+  return p.reduce((acc, x) => acc * 60 + x, 0);
+};
+
+export function TrimCard() {
+  const [list, setList] = useState<TrimVideo[]>([]);
+  useEffect(() => {
+    const load = () => req<{ videos: TrimVideo[] }>("GET", "/api/gaming/trim").then((r) => setList(r.videos)).catch(() => undefined);
+    load();
+    const iv = window.setInterval(load, 5000);
+    return () => window.clearInterval(iv);
+  }, []);
+  if (list.length === 0) return null;
+  return (
+    <>
+      {list.map((v) => <TrimEditor key={v.id} v={v} onDone={() => setList(list.filter((x) => x.id !== v.id))} />)}
+    </>
+  );
+}
+
+function TimeBox({ label, value, max, onChange }: { label: string; value: number; max: number; onChange: (v: number) => void }) {
+  const [txt, setTxt] = useState(hms(value));
+  useEffect(() => setTxt(hms(value)), [value]);
+  return (
+    <label className="field" style={{ maxWidth: 140 }}>
+      <span className="field-label">{label}</span>
+      <input className="input input-sm mono" value={txt} onChange={(e) => setTxt(e.target.value)}
+        onBlur={() => {
+          const n = parseHms(txt);
+          if (n == null) setTxt(hms(value));
+          else onChange(Math.min(max, n));
+        }} />
+    </label>
+  );
+}
+
+function TrimEditor({ v, onDone }: { v: TrimVideo; onDone: () => void }) {
+  const { t } = useI18n();
+  const D = Math.max(60, v.duration);
+  const [start, setStart] = useState(0);
+  const [end, setEnd] = useState(D);
+  const [est, setEst] = useState<{ clips: number; stories: number; total_s: number; stages: Record<string, number> } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [frames, setFrames] = useState({ a: 0, b: Math.max(0, D - 2) });
+  const len = Math.max(0, end - start);
+  useEffect(() => {
+    const h = window.setTimeout(() => {
+      setFrames({ a: start, b: Math.max(start, end - 2) });
+      req<any>("GET", `/api/gaming/estimate?minutes=${(len / 60).toFixed(1)}&style=${v.style}`).then(setEst).catch(() => setEst(null));
+    }, 350);
+    return () => window.clearTimeout(h);
+  }, [start, end, len, v.style]);
+  const step = D > 4 * 3600 ? 60 : D > 3600 ? 30 : 5;
+  const go = async (a: number, b: number) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await req("POST", `/api/gaming/trim/${encodeURIComponent(v.id)}`, { start: a, end: b });
+      onDone();
+    } catch (e) {
+      setErr(String((e as Error).message || e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card gx-card gx-trim">
+      <div className="gx-card-head">
+        <h3>{t("gx.trim_title")}</h3>
+        <span className="chip chip-outline">{v.style === "both" ? t("gx.style_both") : v.style === "direct" ? t("gx.style_direct_short") : t("gx.style_streamer_short")}</span>
+      </div>
+      <p className="small"><b>{v.title}</b> · {hms(v.duration)}{v.streamer ? ` · ${v.streamer}` : ""}</p>
+      <p className="muted small">{t("gx.trim_hint")}</p>
+      <div className="gx-trim-frames">
+        <figure><img src={urls.frame(v.id, frames.a, 480)} alt="" /><figcaption className="small mono">{t("gx.trim_from")} {hms(start)}</figcaption></figure>
+        <figure><img src={urls.frame(v.id, frames.b, 480)} alt="" /><figcaption className="small mono">{t("gx.trim_to")} {hms(end)}</figcaption></figure>
+      </div>
+      <div className="gx-trim-bars">
+        <label className="small">{t("gx.trim_from")}
+          <input type="range" min={0} max={D} step={step} value={start} aria-label={t("gx.trim_from")}
+            onChange={(e) => setStart(Math.min(Number(e.target.value), end - 60))} />
+        </label>
+        <label className="small">{t("gx.trim_to")}
+          <input type="range" min={0} max={D} step={step} value={end} aria-label={t("gx.trim_to")}
+            onChange={(e) => setEnd(Math.max(Number(e.target.value), start + 60))} />
+        </label>
+      </div>
+      <div className="gx-row">
+        <TimeBox label={t("gx.trim_from")} value={start} max={end - 60} onChange={setStart} />
+        <TimeBox label={t("gx.trim_to")} value={end} max={D} onChange={(x) => setEnd(Math.max(x, start + 60))} />
+      </div>
+      <div className="notice small gx-trim-est" role="status">
+        <b>{t("gx.trim_selected", { len: hms(len) })}</b>
+        {est && <> · {t("gx.trim_est", { clips: est.clips, stories: est.stories, time: mins(est.total_s) })}</>}
+      </div>
+      <div className="gx-actions">
+        <button className="btn btn-primary" disabled={busy || len < 60} onClick={() => go(start, end)}>{t("gx.trim_start")}</button>
+        <button className="btn btn-ghost" disabled={busy} onClick={() => go(0, D)}>{t("gx.trim_whole")}</button>
+        {busy && <span className="spinner" aria-hidden />}
+      </div>
+      {err && <div className="notice notice-danger small" role="status">{err}</div>}
     </section>
   );
 }

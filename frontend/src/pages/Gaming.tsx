@@ -7,7 +7,7 @@ import { api, req, uploadFile } from "../api";
 import { useI18n } from "../i18n";
 import { href } from "../router";
 import { BufferPicker, BufferSchedule, BufferSetupCard, type BView } from "../components/Buffer";
-import { EstimateCard, ProgressCard, PromptCard } from "../components/GamingExtras";
+import { EstimateCard, ProgressCard, PromptCard, TrimCard } from "../components/GamingExtras";
 
 type LiveState =
   | "starting" | "connecting" | "recording" | "reconnecting" | "paused" | "stopped" | "ended" | "failed"
@@ -174,6 +174,7 @@ export default function Gaming() {
               <SourceCard kind="vod" style={style} />
               <LiveStartCard ov={ov} onStarted={(id) => { setOpen(id); load(); }} />
             </div>
+            <TrimCard />
             <ProgressCard />
             {ov && ov.sessions.length > 0 && (
               <section style={{ marginTop: 24 }}>
@@ -240,14 +241,29 @@ function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle })
   const { t } = useI18n();
   const [value, setValue] = useState("");
   const [streamer, setStreamer] = useState("");
+  const [trimFirst, setTrimFirst] = useState(() => {
+    try {
+      return localStorage.getItem("sc.trimFirst") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const setTrim = (v: boolean) => {
+    setTrimFirst(v);
+    try {
+      localStorage.setItem("sc.trimFirst", v ? "1" : "0");
+    } catch {
+      /* private window */
+    }
+  };
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const submit = async () => {
     setBusy(true);
     setMsg(null);
     try {
-      const body = kind === "file" ? { path: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style, streamer }
-        : { url: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style, streamer };
+      const body = kind === "file" ? { path: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style, streamer, trim_first: trimFirst }
+        : { url: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style, streamer, trim_first: trimFirst };
       await api.create(body);
       setMsg(t("gaming.queued"));
       setValue("");
@@ -265,7 +281,7 @@ function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle })
     setMsg(null);
     setUp(0);
     try {
-      await uploadFile(f, "gaming", "auto", setUp, false, style, streamer).promise;
+      await uploadFile(f, "gaming", "auto", setUp, false, style, streamer, trimFirst).promise;
       setMsg(t("gaming.queued"));
     } catch (e) {
       setMsg(String((e as Error).message || e));
@@ -310,6 +326,10 @@ function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle })
         <span className="field-label">{t("gx.streamer_name")}</span>
         <input className="input input-sm" value={streamer} placeholder="IShowSpeed" maxLength={60}
           onChange={(e) => setStreamer(e.target.value)} />
+      </label>
+      <label className="check" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+        <input type="checkbox" checked={trimFirst} onChange={(e) => setTrim(e.target.checked)} />
+        <span className="small">{t("gx.trim_first")}</span>
       </label>
       <button className="btn btn-primary" disabled={busy || !value.trim()} onClick={submit} style={{ marginTop: 8 }}>
         {t("gaming.import")}

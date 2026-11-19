@@ -1582,7 +1582,7 @@ export const api = {
   words: (id: string, start: number, end: number) =>
     req<Word[]>("GET", `${P(id)}/words?start=${start}&end=${end}`),
   create: (body: { url?: string; path?: string; mode: Mode; language: string; full_upload?: boolean;
-    clip_style?: "streamer" | "direct" | "both"; streamer?: string }) =>
+    clip_style?: "streamer" | "direct" | "both"; streamer?: string; trim_first?: boolean }) =>
     req<Job>("POST", "/api/projects", body),
   transcribe: (id: string, language = "auto", force = false) =>
     req<Job>("POST", `${P(id)}/transcribe`, { language, force }),
@@ -1975,12 +1975,14 @@ export function uploadFile(
   fullUpload?: boolean,
   clipStyle?: "streamer" | "direct" | "both",
   streamer?: string,
+  trimFirst?: boolean,
 ): { promise: Promise<Job>; abort: () => void } {
   const xhr = new XMLHttpRequest();
   const q = new URLSearchParams({ filename: file.name, mode, language });
   if (fullUpload !== undefined) q.set("full_upload", String(fullUpload));
   if (clipStyle) q.set("clip_style", clipStyle);
   if (streamer && streamer.trim()) q.set("streamer", streamer.trim());
+  if (trimFirst) q.set("trim_first", "true");
   const promise = guardHeavy("PUT", "/api/uploads").then(() => new Promise<Job>((resolve, reject) => {
     xhr.open("PUT", `/api/uploads?${q}`);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");

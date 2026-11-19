@@ -155,7 +155,43 @@ def api_prompts_put(body: dict) -> dict:
 
 
 @router.get("/api/gaming/estimate")
-def api_estimate() -> dict:
+def api_estimate(minutes: float | None = None, style: str | None = None) -> dict:
     from .. import estimate
 
+    if minutes is not None:
+        return estimate.for_minutes(minutes, style if style in ("streamer", "direct", "both") else None)
     return estimate.view()
+
+
+# ===================================================================== trim before clipping
+
+
+@router.get("/api/gaming/trim")
+def api_trim_list() -> dict:
+    """Videos added with "trim first" that wait for the part to clip."""
+    from . import app as A
+
+    out = []
+    for p in A.list_projects():
+        try:
+            m = p.load_meta()
+        except Exception:  # noqa: BLE001
+            continue
+        if m.get("awaiting_trim"):
+            style = "both" if m.get("both_styles") else (m.get("clip_style") or "streamer")
+            out.append({"id": p.id, "title": m.get("title") or p.id, "duration": m.get("duration") or 0,
+                        "style": style, "streamer": m.get("streamer")})
+    busy = [j.project_id for j in A.jobs.jobs() if j.params.get("trim") and j.status in ("queued", "running")]
+    return {"videos": [v for v in out if v["id"] not in busy]}
+
+
+@router.post("/api/gaming/trim/{project_id}")
+def api_trim(project_id: str, body: dict) -> dict:
+    from . import app as A
+
+    m = A.get_project(project_id).load_meta()
+    if not m.get("awaiting_trim"):
+        raise HTTPException(409, "This video is already being clipped.")
+    start = float((body or {}).get("start") or 0)
+    end = float((body or {}).get("end") or m.get("duration") or 0)
+    return A.submit_trim(project_id, start, end).to_dict()

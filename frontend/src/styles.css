@@ -4853,3 +4853,12 @@ a.edit-note:hover { text-decoration: underline; }
 .gx-timeedit { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .gx-room { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0 0; }
 .gx-clip.sent:not(.on) .gx-thumb { opacity: 0.55; }
+
+/* 1.2.60: trim before clipping */
+.gx-trim-frames { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 8px 0; }
+.gx-trim-frames figure { margin: 0; display: grid; gap: 4px; }
+.gx-trim-frames img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--r-md); background: #000; }
+.gx-trim-bars { display: grid; gap: 8px; margin: 8px 0; }
+.gx-trim-bars label { display: grid; gap: 4px; }
+.gx-trim-bars input[type="range"] { width: 100%; accent-color: var(--gold); }
+.gx-trim-est { margin-top: 8px; }
