@@ -468,7 +468,7 @@ def api_gaming_settings_put(body: dict) -> dict:
     for k in ("story_clips", "facecam_per_clip", "story_package"):
         if k in body:
             changes[k] = bool(body[k])
-    if body.get("clip_style") in ("streamer", "direct"):
+    if body.get("clip_style") in ("streamer", "direct", "both"):
         changes["clip_style"] = body["clip_style"]
     if body.get("direct_fit_bg") in ("black", "blur", "white"):
         changes["direct_fit_bg"] = body["direct_fit_bg"]

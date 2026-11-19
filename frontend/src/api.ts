@@ -1582,7 +1582,7 @@ export const api = {
   words: (id: string, start: number, end: number) =>
     req<Word[]>("GET", `${P(id)}/words?start=${start}&end=${end}`),
   create: (body: { url?: string; path?: string; mode: Mode; language: string; full_upload?: boolean;
-    clip_style?: "streamer" | "direct"; streamer?: string }) =>
+    clip_style?: "streamer" | "direct" | "both"; streamer?: string }) =>
     req<Job>("POST", "/api/projects", body),
   transcribe: (id: string, language = "auto", force = false) =>
     req<Job>("POST", `${P(id)}/transcribe`, { language, force }),
@@ -1973,7 +1973,7 @@ export function uploadFile(
   language: string,
   onProgress: (fraction: number) => void,
   fullUpload?: boolean,
-  clipStyle?: "streamer" | "direct",
+  clipStyle?: "streamer" | "direct" | "both",
   streamer?: string,
 ): { promise: Promise<Job>; abort: () => void } {
   const xhr = new XMLHttpRequest();

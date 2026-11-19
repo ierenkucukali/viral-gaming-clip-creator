@@ -15,12 +15,13 @@ from __future__ import annotations
 from . import config
 
 STYLES = ("streamer", "direct")
+CHOICES = STYLES + ("both",)  # "both": analysed once as streamer style, a direct-style twin follows (twins.py)
 FIT_BGS = ("black", "blur", "white")
 
 
 def default() -> str:
     s = str(config.get("clip_style") or "streamer")
-    return s if s in STYLES else "streamer"
+    return s if s in CHOICES else "streamer"
 
 
 def of(meta: dict | None) -> str:
@@ -47,9 +48,12 @@ def set_style(project, style: str) -> None:
     """Store the style in meta.json and give the project's review options the style's defaults."""
     from .web import state
 
+    both = style == "both"
     style = style if style in STYLES else "streamer"
     meta = project.load_meta()
     meta["clip_style"] = style
+    if both:
+        meta["both_styles"] = True
     project.save_meta(meta)
     changes: dict = {"options": review_defaults(style)}
     if style == "direct":

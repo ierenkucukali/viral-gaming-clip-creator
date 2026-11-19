@@ -7,6 +7,57 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.59] - 2026-11-19
+### Both clip styles from one video
+- **New clip style "Both".** The video is analysed once (the same stories, headlines and captions),
+  then every story is rendered twice: the streamer's camera on top, and the whole video in the
+  middle. The second look appears as its own video "… (direct)" in Pick & send. No second AI run,
+  and the video file is shared, not copied.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Tek videodan iki klip stili
+- **Yeni klip stili "Both".** Video bir kez analiz edilir (aynı hikâyeler, başlıklar ve açıklamalar),
+  sonra her hikâye iki kez render edilir: yayıncının kamerası üstte ve videonun tamamı ortada. İkinci
+  görünüm "Seç ve gönder"de ayrı bir video olarak "… (direct)" adıyla çıkar. Yapay zekâ ikinci kez
+  çalışmaz ve video dosyası kopyalanmaz, paylaşılır.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Neuer Clip-Stil „Beide“: das Video wird einmal analysiert und jede Story zweimal gerendert – Streamer-Kamera oben und das ganze Video in der Mitte. Kein zweiter KI-Durchlauf, die Videodatei wird geteilt statt kopiert.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- Új klipstílus: „Mindkettő“ – a videót egyszer elemzi, minden történetet kétszer renderel: streamerkamera felül és a teljes videó középen. Nincs második MI-futás, a videófájl megosztott, nem másolt.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Новый стиль клипов «Оба»: видео анализируется один раз, а каждая история рендерится дважды – камера стримера сверху и всё видео по центру. Второго прогона ИИ нет, видеофайл не копируется.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- نمط مقاطع جديد «كلاهما»: يُحلَّل الفيديو مرة واحدة وتُعرض كل قصة مرتين – كاميرا صانع البث في الأعلى والفيديو كاملاً في المنتصف. بلا تشغيل ثانٍ للذكاء الاصطناعي، ولا يُنسخ ملف الفيديو.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- 新的剪辑风格“两者”：视频只分析一次（同样的故事、标题和文案），然后每个故事渲染两次：一个是主播摄像头在上方，一个是整段原始画面居中。第二种画面会作为单独的视频“…（direct）”出现在“选择并发送”中。不会再次运行 AI，视频文件也是共享而不是复制。
+
+</details>
+
 ## [1.2.58] - 2026-11-19
 ### Clearer Setup, no needless re-renders
 - **Saved keys are shown as saved.** The key boxes say "Saved ✓ (leave empty to keep it)" and show a

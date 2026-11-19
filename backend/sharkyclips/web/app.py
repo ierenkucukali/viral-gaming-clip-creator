@@ -167,9 +167,30 @@ def submit_highlights(project_id: str, mode: str | None = None, force: bool = Fa
         stories = bool((state.load_highlights(project) or {}).get("stories"))
         if llm_available() and config.get("auto_analyze") is not False \
                 and (not stories or config.get("story_package") is True):
-            submit_analyze(project_id)  # titles, viral score, ... (cached per clip)
+            submit_analyze(project_id)  # titles, viral score, ... (cached per clip); the twin follows it
+        else:
+            submit_twin(project_id)  # local fork: "both" clip styles
 
     return jobs.submit("highlights", "gpu", project_id, {"mode": mode, "force": force}, run, then)
+
+
+def submit_twin(project_id: str) -> None:
+    """Local fork: a "both styles" video gets its direct-style twin (same stories + captions), whose
+    clips then render by themselves. Nothing for other projects."""
+    from .. import twins
+
+    try:
+        project = get_project(project_id)
+        if not twins.wanted(project):
+            return
+        had = project.load_meta().get("twin_id")
+        twin = twins.make_twin(project)
+        if twin is not None and not had:
+            submit_auto_render(twin.id)
+    except Exception as exc:  # noqa: BLE001 - the original clips are fine without it
+        from ..ui import console
+
+        console.print(f"[yellow]Direct-style twin skipped: {exc}[/]")
 
 
 def llm_available() -> bool:
@@ -209,6 +230,7 @@ def submit_analyze(project_id: str, lang: str | None = None, force: bool = False
         from .fullvideo_api import after_analysis
 
         after_analysis(project_id)
+        submit_twin(project_id)  # local fork: "both" styles: the twin gets these captions too
 
     # persistent: a pause, restart or crash must not silently lose the publish packages
     key = f"analyze:{project_id}" + (f":{','.join(map(str, ranks))}" if ranks else "") + (":meta" if meta_only else "")
@@ -1592,7 +1614,7 @@ def api_create(body: dict, request: Request) -> dict:
             raise SharkyClipsError(f"File not found: {source}")
     title = source if is_url(source) else Path(source).name
     extra = {"full_upload": bool(body["full_upload"])} if "full_upload" in body else None
-    if body.get("clip_style") in ("streamer", "direct"):  # local fork (Gaming page)
+    if body.get("clip_style") in ("streamer", "direct", "both"):  # local fork (Gaming page)
         extra = {**(extra or {}), "clip_style": body["clip_style"]}
     if str(body.get("streamer") or "").strip():
         extra = {**(extra or {}), "streamer": str(body["streamer"]).strip()[:60]}
@@ -1652,7 +1674,7 @@ async def api_upload(request: Request, filename: str = Query(...), mode: str = Q
     extra = {"easy": True, "mode_auto": mode_auto} if easy else {}
     if full_upload is not None:
         extra["full_upload"] = bool(full_upload)
-    if clip_style in ("streamer", "direct"):  # local fork: the Gaming page's clip style
+    if clip_style in ("streamer", "direct", "both"):  # local fork: the Gaming page's clip style
         extra["clip_style"] = clip_style
     if streamer and streamer.strip():
         extra["streamer"] = streamer.strip()[:60]

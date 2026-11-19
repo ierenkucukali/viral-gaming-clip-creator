@@ -107,7 +107,7 @@ export default function Gaming() {
   useEffect(loadReady, [loadReady, tab]);
   useEffect(() => {
     req<{ clip_style?: ClipStyle }>("GET", "/api/gaming/settings")
-      .then((s) => setStyleState(s.clip_style === "direct" ? "direct" : "streamer")).catch(() => undefined);
+      .then((s) => setStyleState(s.clip_style === "direct" || s.clip_style === "both" ? s.clip_style : "streamer")).catch(() => undefined);
   }, []);
   const setStyle = (v: ClipStyle) => {
     setStyleState(v);
@@ -211,7 +211,7 @@ export default function Gaming() {
   );
 }
 
-type ClipStyle = "streamer" | "direct";
+type ClipStyle = "streamer" | "direct" | "both";
 
 function StyleCard({ style, onChange }: { style: ClipStyle; onChange: (v: ClipStyle) => void }) {
   const { t } = useI18n();
@@ -230,6 +230,7 @@ function StyleCard({ style, onChange }: { style: ClipStyle; onChange: (v: ClipSt
       <div role="radiogroup" aria-label={t("gaming.style_title")} style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         {opt("streamer", t("gaming.style_streamer"), t("gaming.style_streamer_hint"))}
         {opt("direct", t("gaming.style_direct"), t("gaming.style_direct_hint"))}
+        {opt("both", t("gx.style_both"), t("gx.style_both_hint"))}
       </div>
     </section>
   );

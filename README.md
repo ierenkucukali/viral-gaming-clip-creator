@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.58-1F6FE5" alt="Version 1.2.58">
+  <img src="https://img.shields.io/badge/version-1.2.59-1F6FE5" alt="Version 1.2.59">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0E1A33" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/runs%20on-your%20own%20PC-2ea043" alt="Runs on your own PC">
   <img src="https://img.shields.io/badge/AI-Claude%20%7C%20Gemini%20%7C%20local%20Ollama-D9B56A" alt="Claude, Gemini or local AI">
@@ -76,6 +76,7 @@ flowchart LR
    YouTube live stream. Then pick a clip style:
    - **Streamer mode:** the facecam is cut out into the top third and the gameplay fills the bottom two thirds.
    - **Direct mode:** the whole 16:9 video sits in the middle with the headline above it. No picture analysis.
+   - **Both:** analysed once, every story rendered in both looks (no extra AI cost).
 2. **The AI does the rest:**
    - Whisper transcribes the stream.
    - Sound analysis tags the laughs, shouts and loud peaks.

@@ -3136,6 +3136,8 @@ const tr: Record<string, string> = {
   "buf.saved": "Saved",
   "buf.in_use": "in use",
   "buf.saved_keep": "Saved ✓ (leave empty to keep it)",
+  "gx.style_both": "Both: every clip in both looks",
+  "gx.style_both_hint": "Analysed once (the same stories, headlines and captions), then rendered twice: the streamer's camera on top AND the whole video in the middle. Two clips per story, no extra AI cost.",
 };
 
 export default tr;
