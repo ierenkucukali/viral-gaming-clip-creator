@@ -62,7 +62,8 @@ Each entry is in English, then Turkish; short summaries in the other UI language
 <details><summary>中文</summary>
 
 <!-- lang:zh -->
-- 剪辑数量自动决定：AI 会列出每个能单独成片的故事（默认每小时视频最多 30 个）。长直播按 1 小时分段读取。
+- **剪辑数量自动决定：** AI 不再只挑最好的几个，而是列出直播中每个能单独成片的故事（搞笑、暴怒、失误、追车、NPC 对话等），默认每小时视频最多 30 个；平静的直播会少很多，10 小时的直播可以产出数百个剪辑。AI 自己评为无聊的故事会被丢弃。
+- 使用云端 AI 时，长直播按 1 小时分段仔细读取；故事剪辑默认跳过额外的逐条标题步骤，更快也更省钱。
 
 </details>
 
