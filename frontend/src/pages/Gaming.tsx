@@ -238,14 +238,15 @@ function StyleCard({ style, onChange }: { style: ClipStyle; onChange: (v: ClipSt
 function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle }) {
   const { t } = useI18n();
   const [value, setValue] = useState("");
+  const [streamer, setStreamer] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const submit = async () => {
     setBusy(true);
     setMsg(null);
     try {
-      const body = kind === "file" ? { path: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style }
-        : { url: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style };
+      const body = kind === "file" ? { path: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style, streamer }
+        : { url: value.trim(), mode: "gaming" as const, language: "auto", clip_style: style, streamer };
       await api.create(body);
       setMsg(t("gaming.queued"));
       setValue("");
@@ -263,7 +264,7 @@ function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle })
     setMsg(null);
     setUp(0);
     try {
-      await uploadFile(f, "gaming", "auto", setUp, false, style).promise;
+      await uploadFile(f, "gaming", "auto", setUp, false, style, streamer).promise;
       setMsg(t("gaming.queued"));
     } catch (e) {
       setMsg(String((e as Error).message || e));
@@ -303,6 +304,11 @@ function SourceCard({ kind, style }: { kind: "file" | "vod"; style: ClipStyle })
           placeholder={kind === "file" ? "/home/me/Videos/stream.mkv" : "https://www.youtube.com/watch?v=..."}
           onChange={(e) => setValue(e.target.value)}
         />
+      </label>
+      <label className="field">
+        <span className="field-label">{t("gx.streamer_name")}</span>
+        <input className="input input-sm" value={streamer} placeholder="IShowSpeed" maxLength={60}
+          onChange={(e) => setStreamer(e.target.value)} />
       </label>
       <button className="btn btn-primary" disabled={busy || !value.trim()} onClick={submit} style={{ marginTop: 8 }}>
         {t("gaming.import")}

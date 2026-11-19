@@ -7,6 +7,66 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.56] - 2026-11-19
+### Better captions, Buffer plan limits, streamer name
+- **AI description and hashtags go to Buffer.** With "extra titles + description per clip" on, every
+  post gets the viral headline, a short AI description and the AI's hashtags (plus yours).
+- **Written as a clip page:** story clip descriptions are in the third person and name the streamer;
+  Turkish-only tags are left out of English posts.
+- **Streamer name** (Make clips, optional): when the video comes from another channel, the headline,
+  description and hashtag use the streamer's name.
+- **Buffer's own limits are read by Test:** posts a day per channel (free plan: YouTube 2, TikTok 25,
+  Instagram 50; paid: YouTube 100) and how many posts Buffer holds (free 10, paid up to 200 per send).
+  The posting plan never asks for more than Buffer publishes.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Daha iyi açıklamalar, Buffer plan sınırları, yayıncı adı
+- **Yapay zekâ açıklaması ve hashtag'ler Buffer'a gider.** "Klip başına ek başlık + açıklama" açıkken
+  her gönderide viral başlık, kısa bir açıklama ve yapay zekânın hashtag'leri (artı seninkiler) olur.
+- **Klip sayfası gibi yazılır:** açıklamalar üçüncü şahısla, yayıncının adıyla; Türkçe etiketler
+  İngilizce gönderilere eklenmez.
+- **Yayıncı adı** (Klip üret, isteğe bağlı): video başka bir kanaldan geldiyse başlık, açıklama ve
+  hashtag yayıncının adını kullanır.
+- **Buffer'ın kendi sınırları Test ile okunur:** kanal başına günlük paylaşım (ücretsiz: YouTube 2,
+  TikTok 25, Instagram 50; ücretli: YouTube 100) ve Buffer'ın tuttuğu gönderi sayısı.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- KI-Beschreibung und Hashtags gehen jetzt mit an Buffer, in der dritten Person über den Streamer geschrieben. Neues optionales Feld „Streamer-Name“ für Videos von anderen Kanälen. „Test“ liest Buffers eigene Tages- und Warteschlangenlimits.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- Az MI leírása és hashtagjei is a Bufferbe kerülnek, harmadik személyben a streamerről. Új opcionális „Streamer neve” mező más csatornáról származó videókhoz. A „Teszt” beolvassa a Buffer napi és sorlimitjeit.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Описание и хэштеги от ИИ теперь уходят в Buffer, написаны в третьем лице о стримере. Новое необязательное поле «Имя стримера» для видео с других каналов. «Тест» читает дневные лимиты и лимит очереди самого Buffer.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- يُرسل وصف الذكاء الاصطناعي والوسوم الآن إلى Buffer، مكتوبة بضمير الغائب عن صانع البث. حقل اختياري جديد «اسم صانع البث» للفيديوهات من قنوات أخرى. زر «اختبار» يقرأ حدود Buffer اليومية وحد قائمة الانتظار.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- AI 写的描述和话题标签现在也会发送到 Buffer，并以第三人称介绍主播；英文帖子不再带土耳其语标签。新增可选的“主播名称”字段，用于来自其他频道的视频。“测试”会读取 Buffer 自身的每日发布上限和排队上限（免费版 YouTube 每天 2 条，付费版 100 条）。
+
+</details>
+
 ## [1.2.55] - 2026-11-19
 ### Buffer: you send, Buffer posts (this PC can be off)
 - **Send when the app is open, Buffer does the rest.** "Pick & send" shows how much room Buffer

@@ -209,7 +209,7 @@ def windows(lines: list[dict], cloud: bool) -> list[tuple[int, int]]:
 def _prompt(meta: dict, text: str, a: int, b: int, st: dict, want: int, part: str) -> str:
     src = meta.get("source") or {}
     return f"""Video: {meta.get('title', '')}
-Channel: {src.get('uploader') or 'unknown'} (use the streamer's short, well-known name in the headline)
+Channel: {meta.get('streamer') or src.get('uploader') or 'unknown'} (use the streamer's short, well-known name in the headline)
 {part}
 The transcript is numbered by line (L12) with each line's start time [mm:ss or h:mm:ss]. Tags after a line:
 HYPE n = how intense the audio is there (0-100, relative to this video); laugh / shout / scream / cheer /

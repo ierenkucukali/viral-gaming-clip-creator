@@ -30,6 +30,7 @@ class FakeNet:
         self.deleted: list[str] = []
         self.edited: list[dict] = []
         self.room_asks = 0
+        self.plan_limit = 10
         self.own: dict[str, int] = {}  # posts the user scheduled in Buffer itself, per channel
         self.uploads: list[str] = []
         self.destroyed: list[str] = []
@@ -62,7 +63,7 @@ class FakeNet:
     def _gql(self, q: str, v: dict) -> dict:
         if "account" in q:
             return {"data": {"account": {"id": "a1", "name": "Me", "organizations": [
-                {"id": "org1", "name": "My org", "channelCount": 3, "limits": {"scheduledPosts": 10}}]}}}
+                {"id": "org1", "name": "My org", "channelCount": 3, "limits": {"scheduledPosts": self.plan_limit}}]}}}
         if "channels(" in q:
             assert v["org"] == "org1"
             return {"data": {"channels": [
@@ -365,3 +366,24 @@ def test_sent_clips_are_marked_in_the_picker_and_failed_ones_stay_pickable(env):
     assert set(marks[("p1", "c02")].values()) == {"scheduled"}
     with pytest.raises(SharkyClipsError, match="already"):
         B.send([{"project_id": "p1", "cid": "c01"}], wait=True)  # never twice
+
+
+def test_the_ai_package_description_and_hashtags_join_the_caption(env):
+    proj = B._app().get_project("p1")
+    cand = {"id": "c01", "story": {"headline": "Speed was FURIOUS in GTA 6 😡"},
+            "publish": {"titles": ["x"], "hashtags": ["#gta6", "#ishowspeedclips", "#funny"],
+                        "description": "Speed finds tigers in cages and loses it.\n\n#gta6 #rage"}}
+    t = B.default_texts(proj, cand)
+    assert t["title"] == "Speed was FURIOUS in GTA 6 😡"
+    head, body, tags = t["caption"].split("\n\n")
+    assert body == "Speed finds tigers in cages and loses it."
+    assert tags.split()[:4] == ["#ishowspeed", "#gta6", "#ishowspeedclips", "#funny"] and "#rage" in tags
+    assert len(tags.split()) == len({x.lower() for x in tags.split()})  # no duplicates
+
+
+def test_test_reads_buffers_queue_limit_and_daily_limits(env):
+    B.test()
+    assert B.settings()["queue_cap"] == 10  # free plan
+    env.net.plan_limit = 5000  # after upgrading to a paid plan
+    B.test()
+    assert B.settings()["queue_cap"] == B.SEND_MAX

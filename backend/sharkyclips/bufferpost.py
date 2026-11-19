@@ -54,6 +54,7 @@ MAX_UPLOAD_BYTES = 99 * 1024 * 1024  # Cloudinary free plan: 100 MB per video
 CAPTION_MAX = {"instagram": 2196, "tiktok": 2200, "youtube": 5000}
 LOG_MAX = 300
 FINAL = ("sent", "cancelled", "error")
+TR_ONLY_TAGS = {"oyun", "twitchtr", "kicktr", "komikanlar", "oyunculuk", "oyunvideolari", "türkiye", "turkiye"}
 MODES = ("spread", "interval", "times")
 
 _lock = threading.RLock()
@@ -136,6 +137,8 @@ DEFAULTS = {
     "organization_name": "",
     "channels": {p: "" for p in PLATFORMS},
     "channel_names": {p: "" for p in PLATFORMS},
+    # Buffer's own posts-a-day limit per channel (read by Test: free plan YouTube 2, TikTok 25, Instagram 50)
+    "daily_limits": {p: 0 for p in PLATFORMS},
     "platforms": {p: True for p in PLATFORMS},
     "per_day": {p: 10 for p in PLATFORMS},
     # when: "spread" = per_day evenly between window_start and window_end; "interval" = from
@@ -179,7 +182,10 @@ def settings() -> dict:
         elif k in s:
             s[k] = v
     s["enabled"] = s["enabled"] is not False
-    s["per_day"] = {p: _int(s["per_day"].get(p), 1, 50, 10) for p in PLATFORMS}
+    s["daily_limits"] = {p: _int(s["daily_limits"].get(p), 0, 1000, 0) for p in PLATFORMS}
+    s["per_day_wanted"] = {p: _int(s["per_day"].get(p), 1, 50, 10) for p in PLATFORMS}
+    # never more a day than Buffer itself publishes on that channel (more would fail at posting time)
+    s["per_day"] = {p: min(s["per_day_wanted"][p], s["daily_limits"][p] or 1000) for p in PLATFORMS}
     s["platforms"] = {p: bool(s["platforms"].get(p)) for p in PLATFORMS}
     s["window_start"] = _hhmm(s["window_start"]) or "10:00"
     s["window_end"] = _hhmm(s["window_end"]) or "23:00"
@@ -191,7 +197,7 @@ def settings() -> dict:
         s["mode"] = "spread"
     s["start_time"] = _hhmm(s["start_time"]) or "10:00"
     s["gap_min"] = _int(s["gap_min"], 5, 720, 60)
-    s["queue_cap"] = _int(s["queue_cap"], 1, 100, 10)
+    s["queue_cap"] = _int(s["queue_cap"], 1, SEND_MAX, 10)
     yt = s["youtube"]
     yt["privacy"] = yt["privacy"] if yt.get("privacy") in YT_PRIVACY else "public"
     yt["category"] = str(yt.get("category") or "20") if str(yt.get("category") or "20").isdigit() else "20"
@@ -207,7 +213,7 @@ def save_settings(body: dict) -> dict:
     cur = config.get("buffer") or {}
     new = dict(cur)
     for k, v in (body or {}).items():
-        if k not in DEFAULTS or k in ("organization_name", "channel_names"):
+        if k not in DEFAULTS or k in ("organization_name", "channel_names", "daily_limits"):
             continue
         if isinstance(DEFAULTS[k], dict) and isinstance(v, dict):
             new[k] = {**(cur.get(k) or {}), **v}
@@ -336,6 +342,7 @@ M_EDIT = """mutation($input: EditPostInput!) { editPost(input: $input) {
 Q_SCHEDULED = """query($org: OrganizationId!, $ch: [ChannelId!]) {
   posts(first: 100, input: {organizationId: $org, filter: {status: [scheduled], channelIds: $ch}}) {
     edges { node { id channelId dueAt } } } }"""
+Q_DAILY = """query($ids: [ChannelId!]!) { dailyPostingLimits(input: {channelIds: $ids}) { channelId limit } }"""
 Q_POST = """query($id: PostId!) { post(input: {id: $id}) { id status dueAt sentAt externalLink
   error { message } } }"""
 
@@ -426,9 +433,22 @@ def test() -> dict:
                 mapping[p] = (ok or mine or [{"id": ""}])[0]["id"]
             ch = next((c for c in mine if c["id"] == mapping[p]), None)
             names[p] = (ch.get("displayName") or ch.get("name")) if ch else ""
+        limits = {p: 0 for p in PLATFORMS}
+        ids = [c for c in mapping.values() if c]
+        if ids:
+            try:
+                by = {v: k for k, v in mapping.items()}
+                for x in gql(Q_DAILY, {"ids": ids}).get("dailyPostingLimits") or []:
+                    if by.get(x.get("channelId")) and x.get("limit"):
+                        limits[by[x["channelId"]]] = int(x["limit"])
+            except SharkyClipsError:
+                pass
         raw = dict(config.get("buffer") or {})
         raw.update(organization_id=org["id"], organization_name=org.get("name") or "", channels=mapping,
-                   channel_names=names)
+                   channel_names=names, daily_limits=limits)
+        plan = int((org.get("limits") or {}).get("scheduledPosts") or 0)
+        if plan > 0:  # Buffer's real queue limit (free 10; paid plans much more): "Pick & send" follows it
+            raw["queue_cap"] = min(plan, SEND_MAX)
         config.update(buffer=raw)
         with _lock:
             st = load_state()
@@ -437,7 +457,8 @@ def test() -> dict:
             _save_state(st)
         _CHAN_CACHE.update(at=time.time(), channels=chans)
         out["buffer"] = {"ok": True, "organization": org.get("name"), "scheduled_limit": (org.get("limits") or {}).get("scheduledPosts"),
-                         "channels": [_chan_view(c) for c in chans], "mapping": mapping}
+                         "channels": [_chan_view(c) for c in chans], "mapping": mapping,
+                         "daily_limits": limits}
     except SharkyClipsError as exc:
         out["buffer"] = {"ok": False, "error": str(exc), "hint": getattr(exc, "hint", None)}
     try:
@@ -471,13 +492,23 @@ def default_texts(project, cand: dict) -> dict:
     pub = cand.get("publish") or {}
     head = _clean(story.get("headline") or (pub.get("titles") or [""])[0] or story.get("title") or "")
     meta = project.load_meta()
-    up = str(((meta.get("source") or {}).get("uploader") or "")).strip()
-    tags = _tags(s["hashtags"])
+    # meta "streamer": the streamer's name when the video came from someone else's channel (a re-upload)
+    up = str(meta.get("streamer") or ((meta.get("source") or {}).get("uploader") or "")).strip()
+    # the AI package (Gaming > Setup > "extra titles + description per clip"): its description and
+    # hashtags join the caption; without it: the headline + the hashtags of the settings
+    from .publishing import split_hashtags
+
+    body, ai_tags = split_hashtags(str(pub.get("description") or ""))
+    ai_tags = [str(t) for t in (pub.get("hashtags") or [])] + ai_tags
+    if str(config.get("output_language") or "en") != "tr":  # the generic game bank has Turkish tags
+        ai_tags = [t for t in ai_tags if t.lower().lstrip("#") not in TR_ONLY_TAGS]
+    tags = _tags(" ".join(ai_tags[:8]) + " " + s["hashtags"])[:12]
     if up:
         ut = "#" + re.sub(r"[^\w]", "", up, flags=re.UNICODE).lower()
         if len(ut) > 2 and ut.lower() not in (t.lower() for t in tags):
             tags.insert(0, ut)
-    caption = head + ("\n\n" + " ".join(tags) if tags else "")
+    body = _clean(body)
+    caption = head + (f"\n\n{body}" if body and body.lower() != head.lower() else "") + ("\n\n" + " ".join(tags) if tags else "")
     yt_title = head if len(head) <= 100 else head[:99].rstrip() + "…"
     return {"title": yt_title, "caption": caption}
 
@@ -1003,6 +1034,7 @@ def view() -> dict:
         nxt = next_slots(st, p, 3, now, s) if s["platforms"][p] else []
         last = max((i["due_at"] for i in mine if i["state"] == "scheduled"), default=None)
         per[p] = {"label": LABELS[p], "enabled": s["platforms"][p], "per_day": s["per_day"][p],
+                  "per_day_wanted": s["per_day_wanted"][p], "daily_limit": s["daily_limits"][p] or None,
                   "channel": s["channels"].get(p) or "", "channel_name": s["channel_names"].get(p) or "",
                   "scheduled": sum(1 for i in mine if i["state"] == "scheduled"),
                   "sent": sum(1 for i in mine if i["state"] == "sent"),

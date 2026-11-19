@@ -387,7 +387,7 @@ def _context_block(meta: dict, mode: str, c: dict, transcript: dict, game: dict 
     spoken = transcript.get("language") or "unknown"
     gl = game_lines(game, facts) if mode == "gaming" else ""
     return f"""Video title: {meta.get('title', '')}
-Channel: {(meta.get('source') or {}).get('uploader') or 'unknown'}
+Channel: {meta.get('streamer') or (meta.get('source') or {}).get('uploader') or 'unknown'}
 Content type: {mode}{chr(10) + gl if gl else ''}
 Spoken language: {lang_name(spoken)}
 Clip: {c['duration']:.1f} s long (hype rank #{c['rank']}, hype {c['hype_score']}/100)
@@ -456,7 +456,15 @@ def _description_prompt(meta: dict, mode: str, c: dict, transcript: dict, out_la
     names = ", ".join(terms[:20]) or "none"
     tone = {"tr": " Use casual spoken Turkish (\"indirdim\", \"bakın ne oldu\", \"chat çıldırdı\"), never news style like \"-mektedir\" or \"-mıştır\"."}
     gaming = mode == "gaming"
-    if gaming:
+    page = bool(c.get("story"))  # local fork: story clips are posted by a clip page, not by the streamer
+    if gaming and page:
+        streamer = (meta.get("streamer") or (meta.get("source") or {}).get("uploader") or "").strip()
+        body = ("- 2-3 short, lively sentences in the THIRD person, like a gaming clip page posting the streamer's best "
+                f"moments: name the streamer by the short name viewers know ({streamer or 'the streamer'}), say what "
+                "happens in THIS clip and why it's worth watching. Never write as the streamer (no I / we / my).\n"
+                f"- The LAST sentence is a short question that makes viewers comment, like "
+                f"{DESCRIPTION_QUESTIONS.get(out_lang, DESCRIPTION_QUESTIONS['en'])}.")
+    elif gaming:
         where = (f"Write it like a streamer who plays {game['name']}: use the game's own words where they fit "
                  "(only names from the clip facts or the list below)." if game and game.get("known")
                  else "The game is unknown: never name or guess a game.")
@@ -474,7 +482,7 @@ Chosen title: {title}
 
 TASK: write the YouTube description of this clip in {lang_name(out_lang)}.
 {body}{tone.get(out_lang, "")}
-- Never mention the channel or the creator by name, and never describe the creator in the third person.
+{"- Name the streamer, in the third person." if page else "- Never mention the channel or the creator by name, and never describe the creator in the third person."}
 - Only what the CLIP lines and game events show; never invent events, scores or names. Don't mention swearing.
 - Spell these names exactly like this: {names}
 - Don't repeat the title word for word. No hashtags, emojis, links or ALL CAPS (the hashtags and links are added later).
@@ -482,7 +490,11 @@ TASK: write the YouTube description of this clip in {lang_name(out_lang)}.
 """
 
 
-def _description_soft_checker(out_lang: str, channel: list[str], question: bool = False) -> Callable[[dict], list[str]]:
+_FIRST_PERSON = re.compile(r"\b(I|I'm|I've|I'd|me|my|we|we're|our|us)\b")
+
+
+def _description_soft_checker(out_lang: str, channel: list[str], question: bool = False,
+                              third_person: bool = False) -> Callable[[dict], list[str]]:
     """Style problems: asked to be fixed, but an answer that still has them is kept."""
     keys = [_name_key(n) for n in channel if len(_name_key(n)) >= 3]
 
@@ -490,7 +502,10 @@ def _description_soft_checker(out_lang: str, channel: list[str], question: bool 
         text = d.get("description", "")
         errs = []
         flat = _name_key(text)
-        if any(k in flat for k in keys):
+        if third_person:  # local fork: a clip page writes about the streamer
+            if out_lang == "en" and _FIRST_PERSON.search(text):
+                errs.append("write in the third person about the streamer (no I / we / my)")
+        elif any(k in flat for k in keys):
             errs.append("don't name the channel/creator: write in the first person (I / we)")
         if out_lang == "tr" and TR_FORMAL.search(text):
             errs.append("write casual spoken Turkish, not news style (-mektedir / -mıştır)")
@@ -535,7 +550,8 @@ def write_description(model, meta: dict, mode: str, c: dict, transcript: dict, o
                                                list(gl.terms) if gl else [], game, facts),
                    DESCRIPTION_SCHEMA, temperature=0.65 if gaming else 0.6,
                    check=_description_checker(out_lang, (game or {}).get("id") if gaming else None),
-                   soft=_description_soft_checker(out_lang, _channel_names(meta), question=gaming), num_predict=700)
+                   soft=_description_soft_checker(out_lang, _channel_names(meta), question=gaming,
+                                                  third_person=gaming and bool(c.get("story"))), num_predict=700)
     return d["description"]
 
 

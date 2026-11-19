@@ -3126,6 +3126,8 @@ const tr: Record<string, string> = {
   "buf.plan_limit": "Buffer's limit",
   "buf.plan_limit_hint": "How many scheduled posts Buffer holds per channel (free plan: 10). “Pick & send” sends at most this many more.",
   "buf.send_again": "Send again",
+  "buf.daily_cap": "Buffer posts at most {n} a day on this channel on your plan (free plan: YouTube 2, TikTok 25, Instagram 50), so the plan uses {n}. A paid Buffer plan allows 100 on YouTube: press Test after upgrading.",
+  "gx.streamer_name": "Streamer name (optional: if the video is from another channel, e.g. a clip channel)",
 };
 
 export default tr;

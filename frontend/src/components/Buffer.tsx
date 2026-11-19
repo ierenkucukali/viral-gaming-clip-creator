@@ -16,6 +16,8 @@ export interface BSettings {
   channel_names: Record<BPlatform, string>;
   platforms: Record<BPlatform, boolean>;
   per_day: Record<BPlatform, number>;
+  per_day_wanted: Record<BPlatform, number>;
+  daily_limits: Record<BPlatform, number>;
   mode: "spread" | "interval" | "times";
   window_start: string;
   window_end: string;
@@ -534,12 +536,12 @@ export function PostingPlan({ v, setV }: { v: BView; setV: (v: BView) => void })
   const { t } = useI18n();
   const s = v.settings;
   const [d, setD] = useState(() => ({ mode: s.mode, window_start: s.window_start, window_end: s.window_end,
-    start_time: s.start_time, gap_min: s.gap_min, times: s.times.join(", "), per_day: { ...s.per_day },
+    start_time: s.start_time, gap_min: s.gap_min, times: s.times.join(", "), per_day: { ...s.per_day_wanted },
     queue_cap: s.queue_cap }));
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const dirty = JSON.stringify(d) !== JSON.stringify({ mode: s.mode, window_start: s.window_start, window_end: s.window_end,
-    start_time: s.start_time, gap_min: s.gap_min, times: s.times.join(", "), per_day: s.per_day, queue_cap: s.queue_cap });
+    start_time: s.start_time, gap_min: s.gap_min, times: s.times.join(", "), per_day: s.per_day_wanted, queue_cap: s.queue_cap });
   const save = async () => {
     setErr(null);
     try {
@@ -547,7 +549,7 @@ export function PostingPlan({ v, setV }: { v: BView; setV: (v: BView) => void })
       setV(nv);
       const x = nv.settings;
       setD({ mode: x.mode, window_start: x.window_start, window_end: x.window_end, start_time: x.start_time, gap_min: x.gap_min,
-        times: x.times.join(", "), per_day: { ...x.per_day }, queue_cap: x.queue_cap });
+        times: x.times.join(", "), per_day: { ...x.per_day_wanted }, queue_cap: x.queue_cap });
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
     } catch (e) {
@@ -571,6 +573,9 @@ export function PostingPlan({ v, setV }: { v: BView; setV: (v: BView) => void })
                 <span className="field-label">{v.platforms[p].label}{s.platforms[p] ? "" : ` (${t("buf.off")})`}</span>
                 <input className="input input-sm" type="number" min={1} max={50} value={d.per_day[p]}
                   onChange={(e) => setD({ ...d, per_day: { ...d.per_day, [p]: Number(e.target.value) } })} />
+                {s.daily_limits[p] > 0 && d.per_day[p] > s.daily_limits[p] && (
+                  <span className="small danger">{t("buf.daily_cap", { n: s.daily_limits[p] })}</span>
+                )}
               </label>
             ))}
           </div>
@@ -612,7 +617,7 @@ export function PostingPlan({ v, setV }: { v: BView; setV: (v: BView) => void })
           <h4>3 · {t("buf.plan_limit")}</h4>
           <div className="gx-row">
             <label className="field" style={{ maxWidth: 220 }}><span className="field-label">{t("buf.queue_cap")}</span>
-              <input className="input input-sm" type="number" min={1} max={100} value={d.queue_cap} onChange={(e) => setD({ ...d, queue_cap: Number(e.target.value) })} /></label>
+              <input className="input input-sm" type="number" min={1} max={200} value={d.queue_cap} onChange={(e) => setD({ ...d, queue_cap: Number(e.target.value) })} /></label>
           </div>
           <p className="muted small" style={{ marginTop: 6 }}>{t("buf.plan_limit_hint")}</p>
         </div>

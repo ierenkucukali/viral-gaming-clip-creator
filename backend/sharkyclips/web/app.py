@@ -317,6 +317,11 @@ def submit_import(source: str, mode: str, language: str, title: str,
         # local fork: streamer cam + gameplay, or the direct (whole video centred) style; imports
         # without a choice (Create clips page, phone, watch folder) use the Gaming page's selection
         clipstyle.set_style(project, (extra or {}).get("clip_style") or clipstyle.default())
+        streamer = str((extra or {}).get("streamer") or "").strip()[:60]
+        if streamer:  # the streamer's name when the video is a re-upload from another channel
+            meta = project.load_meta()
+            meta["streamer"] = streamer
+            project.save_meta(meta)
         return {"project_id": project.id}
 
     def then(job: Job):
@@ -1589,13 +1594,16 @@ def api_create(body: dict, request: Request) -> dict:
     extra = {"full_upload": bool(body["full_upload"])} if "full_upload" in body else None
     if body.get("clip_style") in ("streamer", "direct"):  # local fork (Gaming page)
         extra = {**(extra or {}), "clip_style": body["clip_style"]}
+    if str(body.get("streamer") or "").strip():
+        extra = {**(extra or {}), "streamer": str(body["streamer"]).strip()[:60]}
     return submit_import(source, mode, language, title, extra=extra).to_dict()
 
 
 @app.put("/api/uploads")
 async def api_upload(request: Request, filename: str = Query(...), mode: str = Query("gaming"),
                      language: str = Query("auto"), easy: bool = Query(False),
-                     full_upload: bool | None = Query(None), clip_style: str | None = Query(None)) -> dict:
+                     full_upload: bool | None = Query(None), clip_style: str | None = Query(None),
+                     streamer: str | None = Query(None)) -> dict:
     """Raw file upload (streamed straight to disk - works for multi-GB stream files).
     easy=true: an Easy mode project (mode "auto" = detect the content type)."""
     mode_auto = mode == "auto"
@@ -1646,6 +1654,8 @@ async def api_upload(request: Request, filename: str = Query(...), mode: str = Q
         extra["full_upload"] = bool(full_upload)
     if clip_style in ("streamer", "direct"):  # local fork: the Gaming page's clip style
         extra["clip_style"] = clip_style
+    if streamer and streamer.strip():
+        extra["streamer"] = streamer.strip()[:60]
     return submit_import(str(dest), mode, language, name, cleanup=dest, extra=extra or None).to_dict()
 
 
