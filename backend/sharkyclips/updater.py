@@ -42,8 +42,9 @@ from .procs import no_window
 
 RESTART_CODE = 75  # `serve` restarts the server when it exits with this code
 REQUIREMENTS = ("backend/requirements.txt", "backend/requirements-nvidia.txt")
-RELEASES_URL = "https://github.com/utkualsir/sharkyclips/releases"
-OFFICIAL_REPO = "github.com/utkualsir/sharkyclips"
+# fork: updates come from this repository (the upstream is github.com/utkualsir/sharkyclips, MIT)
+RELEASES_URL = "https://github.com/ierenkucukali/viral-gaming-clip-creator/releases"
+OFFICIAL_REPO = "github.com/ierenkucukali/viral-gaming-clip-creator"
 OFFICIAL_BRANCH = "main"
 _VERSION_RE = re.compile(r'__version__\s*=\s*["\']([^"\']+)["\']')
 

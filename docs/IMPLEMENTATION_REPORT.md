@@ -110,9 +110,9 @@ Verified end to end on `https://www.youtube.com/watch?v=kR8bhkVAgBY` ("iShowSpee
 
 - **Streamer mode**: facecam found automatically (x 0, y 0.42, w 0.20, h 0.23, confidence 0.97) although the
   game shows many faces; story finder (local qwen3.5:4b) found 9 stories; 3 rendered: 1080x1920 H.264/AAC 60 fps,
-  31-49 s, audio and video both start at 0.000 s and end within 0.01 ms. Frames: `docs/evidence/ishowspeed_streamer_mode.jpg`.
+  31-49 s, audio and video both start at 0.000 s and end within 0.01 ms. Frames were checked locally (not in the repository: third-party content).
 - **Direct mode** (new, `clipstyle.py`): no facecam detection at all, layout "fit" on black, headline right above the
-  16:9 picture, captions below; 7 stories; 3 rendered 59-89 s, A/V in sync. Frames: `docs/evidence/ishowspeed_direct_mode.jpg`.
+  16:9 picture, captions below; 7 stories; 3 rendered 59-89 s, A/V in sync. Frames were checked locally (not in the repository).
 - Exports: `exports/2026-11-19/` (6 clips).
 - **Story length**: Reels data says 45-60 s works best -> target 55 s, min 30, max 120; stories under score 85
   are capped at 1.6x the target (88 s).

@@ -57,7 +57,7 @@ python cli.py transcribe <id-öneki>      # GPU
 python cli.py highlights <id-öneki>
 ```
 
-**Yerel dosya:** Oyun → Yerel dosya → tam yol (ör. `/home/kali/Videos/yayin.mkv`) → İçe aktar.
+**Yerel dosya:** Oyun → Yerel dosya → tam yol (ör. `/home/ben/Videolar/yayin.mkv`) → İçe aktar.
 MP4/MKV/TS desteklenir; dosya kopyalanmaz, hard-link yapılır.
 
 ## 3) Süren (CANLI) bir yayını kaydetmek

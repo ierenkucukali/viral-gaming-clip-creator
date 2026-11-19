@@ -1,5 +1,10 @@
 # AI options and cost per 1 hour of video (2026-11-19)
 
+> **Since 1.2.54 the per-clip package (step 2) is off for story clips** (the story finder already
+> writes the headline, title and description), so a 1-hour stream costs only the story finder:
+> about **$0.25 on Opus 5.5, $0.12 on Sonnet 5.5, a few cents on Haiku 5.5 / Gemini Flash**. The
+> table below is the full cost with the package switched on (Gaming → Setup → Clip shape).
+
 ## What the AI does here
 
 1. **Story finder** (`storyfind.py`): reads the whole transcript once and returns the stories + headlines.

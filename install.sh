@@ -12,7 +12,7 @@
 #          --no-shortcuts  --shortcut-dir DIR (testing)  --no-launch
 
 set -u
-REPO_URL="https://github.com/utkualsir/sharkyclips.git"
+REPO_URL="https://github.com/ierenkucukali/viral-gaming-clip-creator.git"
 
 YES=0; DRY=0; LANG_CHOICE="auto"; INSTALL_DIR=""; NO_MODELS=0; NO_SHORTCUTS=0; SHORTCUT_DIR=""; NO_LAUNCH=0
 while [ $# -gt 0 ]; do

@@ -508,6 +508,28 @@ export function BufferPicker({ goSetup }: { goSetup: () => void }) {
 
 // ===================================================================== the schedule (outbox)
 
+/** The times of one day for the plan being edited (same rules as bufferpost._day_times). */
+function exampleDay(mode: string, n: number, a: string, b: string, start: string, gap: number, times: string): string[] {
+  const mins = (hhmm: string) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const fmt = (x: number) => `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+  const k = Math.max(1, Math.min(50, n || 1));
+  if (mode === "times") {
+    return [...new Set(times.split(/[ ,;]+/).map(mins).filter((x): x is number => x != null && x < 1440))].sort((x, y) => x - y).slice(0, k).map(fmt);
+  }
+  if (mode === "interval") {
+    const s0 = mins(start) ?? 600;
+    return Array.from({ length: k }, (_, i) => s0 + gap * i).filter((x) => x < 1440).map(fmt);
+  }
+  const a0 = mins(a) ?? 600;
+  let b0 = mins(b) ?? 1380;
+  if (b0 <= a0) b0 = 1439;
+  if (k === 1) return [fmt(a0 + (b0 - a0) / 2)];
+  return Array.from({ length: k }, (_, i) => a0 + ((b0 - a0) * i) / (k - 1)).map(fmt);
+}
+
 export function PostingPlan({ v, setV }: { v: BView; setV: (v: BView) => void }) {
   const { t } = useI18n();
   const s = v.settings;
@@ -532,7 +554,7 @@ export function PostingPlan({ v, setV }: { v: BView; setV: (v: BView) => void })
       setErr(errText(e));
     }
   };
-  const day = v.platforms.tiktok.day.length ? v.platforms.tiktok.day : v.platforms.instagram.day;
+  const day = exampleDay(d.mode, d.per_day.tiktok || d.per_day.instagram, d.window_start, d.window_end, d.start_time, d.gap_min, d.times);
   return (
     <section className="card gx-card gx-plan">
       <div className="gx-card-head">

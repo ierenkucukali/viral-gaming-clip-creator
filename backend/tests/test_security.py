@@ -649,12 +649,12 @@ def test_updater_refuses_an_unofficial_remote(tmp_path, monkeypatch):
 
 
 def test_updater_remote_normalisation():
-    for url in ("https://github.com/utkualsir/sharkyclips.git", "https://github.com/utkualsir/sharkyclips",
-                "git@github.com:utkualsir/sharkyclips.git", "ssh://git@github.com/utkualsir/sharkyclips.git",
-                "https://GitHub.com/UtkuAlsir/SharkyClips/"):
+    for url in ("https://github.com/ierenkucukali/viral-gaming-clip-creator.git", "https://github.com/ierenkucukali/viral-gaming-clip-creator",
+                "git@github.com:ierenkucukali/viral-gaming-clip-creator.git", "ssh://git@github.com/ierenkucukali/viral-gaming-clip-creator.git",
+                "https://GitHub.com/IErenKucukali/Viral-Gaming-Clip-Creator/"):
         assert updater._norm_remote(url) == updater.OFFICIAL_REPO, url
-    for url in ("https://github.com/attacker/sharkyclips.git", "https://github.com.evil.example/utkualsir/sharkyclips",
-                "https://evil.example/github.com/utkualsir/sharkyclips"):
+    for url in ("https://github.com/attacker/viral-gaming-clip-creator.git", "https://github.com.evil.example/ierenkucukali/viral-gaming-clip-creator",
+                "https://evil.example/github.com/ierenkucukali/viral-gaming-clip-creator", "https://github.com/utkualsir/sharkyclips.git"):
         assert updater._norm_remote(url) != updater.OFFICIAL_REPO, url
 
 

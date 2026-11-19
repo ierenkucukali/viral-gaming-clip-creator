@@ -35,7 +35,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$RepoUrl = 'https://github.com/utkualsir/sharkyclips.git'
+$RepoUrl = 'https://github.com/ierenkucukali/viral-gaming-clip-creator.git'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
 # ------------------------------------------------------------------ messages
