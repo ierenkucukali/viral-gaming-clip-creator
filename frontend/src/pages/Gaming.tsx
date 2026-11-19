@@ -792,6 +792,7 @@ function TuningCard() {
   const [perHour, setPerHour] = useState(30);
   const [minScore, setMinScore] = useState(50);
   const [pkg, setPkg] = useState(false);
+  const [autoLen, setAutoLen] = useState(true);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     req<Record<string, unknown>>("GET", "/api/gaming/settings").then((s) => {
@@ -804,12 +805,13 @@ function TuningCard() {
       setPerHour((s.story_per_hour as number) ?? 30);
       setMinScore((s.story_min_score as number) ?? 50);
       setPkg(s.story_package === true);
+      setAutoLen(s.story_auto_length !== false);
     }).catch(() => undefined);
   }, []);
   if (!tun) return null;
   const save = async () => {
     await req("PUT", "/api/gaming/settings", { tuning: tun, candidate_count: count === "" ? null : count, daily_target: target, weak_score: weak,
-      story_clips: stories, facecam_per_clip: perClip, story_per_hour: perHour, story_min_score: minScore, story_package: pkg });
+      story_clips: stories, facecam_per_clip: perClip, story_per_hour: perHour, story_min_score: minScore, story_package: pkg, story_auto_length: autoLen });
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
   };
@@ -847,6 +849,10 @@ function TuningCard() {
       <label className="check" style={{ marginTop: 4, display: "flex", gap: 8, alignItems: "center" }}>
         <input type="checkbox" checked={perClip} onChange={(e) => setPerClip(e.target.checked)} />
         <span>{t("gaming.facecam_per_clip")}</span>
+      </label>
+      <label className="check" style={{ marginTop: 4, display: "flex", gap: 8, alignItems: "center" }}>
+        <input type="checkbox" checked={autoLen} onChange={(e) => setAutoLen(e.target.checked)} />
+        <span>{t("gx.auto_length")}</span>
       </label>
       <label className="check" style={{ marginTop: 4, display: "flex", gap: 8, alignItems: "center" }}>
         <input type="checkbox" checked={pkg} onChange={(e) => setPkg(e.target.checked)} />

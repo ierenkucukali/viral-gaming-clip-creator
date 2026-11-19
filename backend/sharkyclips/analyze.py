@@ -459,9 +459,13 @@ def _description_prompt(meta: dict, mode: str, c: dict, transcript: dict, out_la
     page = bool(c.get("story"))  # local fork: story clips are posted by a clip page, not by the streamer
     if gaming and page:
         streamer = (meta.get("streamer") or (meta.get("source") or {}).get("uploader") or "").strip()
+        game_name = ((c.get("story") or {}).get("game") or (game or {}).get("name") or "").strip()
         body = ("- 2-3 short, lively sentences in the THIRD person, like a gaming clip page posting the streamer's best "
-                f"moments: name the streamer by the short name viewers know ({streamer or 'the streamer'}), say what "
-                "happens in THIS clip and why it's worth watching. Never write as the streamer (no I / we / my).\n"
+                f"moments: name the streamer by the short name viewers know ({streamer or 'the streamer'}), say briefly "
+                "what happens in THIS clip and why it's worth watching. "
+                + (f"The game is {game_name}: name it once and use its own words where they fit (places, items, "
+                   "enemies, modes). " if game_name else "The game is unknown: never name or guess a game. ")
+                + "Never write as the streamer (no I / we / my).\n"
                 f"- The LAST sentence is a short question that makes viewers comment, like "
                 f"{DESCRIPTION_QUESTIONS.get(out_lang, DESCRIPTION_QUESTIONS['en'])}.")
     elif gaming:

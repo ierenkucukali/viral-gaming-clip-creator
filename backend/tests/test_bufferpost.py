@@ -117,7 +117,8 @@ def env(monkeypatch, tmp_path):
             (d / "clips" / f"{k:02d}_{cid}.mp4").write_bytes(b"\0" * 1000)
             cl[cid] = {"file": f"{k:02d}_{cid}.mp4", "rank": k, "start": 100.0 * k, "end": 100.0 * k + 50, "duration": 50.0}
             cands.append({"id": cid, "start": 100.0 * k, "end": 100.0 * k + 50, "peak": 100.0 * k + 30,
-                          "story": {"headline": f"Speed found <the> SECRET island number {k} 😳🌴", "title": "t", "score": 90 - k}})
+                          "story": {"headline": f"Speed found <the> SECRET island number {k} 😳🌴", "title": "t", "score": 90 - k,
+                                    "game": "GTA 6", "why": "Speed finds an island."}})
         clips[pid], hls[pid] = cl, {"candidates": cands}
         projects[pid] = SimpleNamespace(id=pid, dir=d, load_meta=lambda: {"title": "Speed GTA", "source": {"uploader": "IShowSpeed"},
                                                                            "created_at": "2026-11-19"})
@@ -477,3 +478,14 @@ def test_r2_keys_are_checked():
         B.save_keys({"r2": {**R2_KEYS, "account_id": "nope"}})
     with pytest.raises(SharkyClipsError, match="public address"):
         B.save_keys({"r2": {**R2_KEYS, "public_url": "pub-abc.r2.dev"}})
+
+
+def test_the_games_own_hashtags_and_no_fixed_gta_tags(env):
+    proj = B._app().get_project("p1")
+    mc = B.default_texts(proj, {"story": {"headline": "Speed got TERRIFIED by the Warden in Minecraft 😭", "game": "Minecraft"}})
+    tags = mc["caption"].split("\n\n")[-1].split()
+    assert tags[:2] == ["#ishowspeed", "#minecraft"] and "#gta6" not in tags and "#gaming" in tags
+    gta = B.default_texts(proj, {"story": {"headline": "Speed went ALL IN in GTA 6 🔥", "game": "GTA 6"}})
+    assert "#gta6" in gta["caption"] and "#gta" in gta["caption"].split()
+    none = B.default_texts(proj, {"story": {"headline": "Speed laughs at chat 😂"}})
+    assert none["caption"].split("\n\n")[-1].split() == ["#ishowspeed", "#gaming", "#streamer", "#fyp"]

@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import pytest
+
 import json
 
 from sharkyclips import clipstyle, config, twins
 from sharkyclips.project import Project
+
+
+@pytest.fixture(autouse=True)
+def _clean_workspace():
+    """These tests make projects in the throwaway workspace: remove them again (test_web expects none)."""
+    root = config.workspace_dir()
+    before = {p.name for p in root.iterdir()}
+    yield
+    import shutil
+
+    for p in root.iterdir():
+        if p.name not in before:
+            shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
 
 
 def _project(pid: str = "speed-gta-1234abcd") -> Project:

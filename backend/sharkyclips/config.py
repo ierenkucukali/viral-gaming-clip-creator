@@ -25,7 +25,7 @@ DEFAULTS: dict[str, Any] = {
     "output_language": languages.DEFAULT_OUTPUT_LANGUAGE,
     "default_mode": "gaming",
     # local gaming fork: clip shape per mode (highlights/modes.py tuned), candidate count, daily target
-    "mode_tuning": {"gaming": {"clip_min": 30, "clip_ideal": 55, "clip_max": 120, "pre_roll": [8, 20], "min_gap": 60}},
+    "mode_tuning": {"gaming": {"clip_min": 20, "clip_ideal": 55, "clip_max": 180, "pre_roll": [8, 20], "min_gap": 60}},
     # Story clips (storyfind.py): the AI reads the whole transcript and picks setup -> peak -> payoff
     "story_clips": True,
     "story_min": 30, "story_ideal": 55, "story_max": 120,  # seconds (Reels data: 45-60 s works best)
@@ -46,7 +46,8 @@ DEFAULTS: dict[str, Any] = {
     #  "times": ["12:00", "18:00", "21:00"], "min_score": 55, "days_ahead": 2, "tiktok_consent": bool}
     "autopost": {},
     "buffer": {},  # local fork: Buffer publishing (bufferpost.py)
-    "story_extra_prompt": "",  # local fork: the channel owner's extra instructions for the story finder
+    "story_extra_prompt": "",
+    "story_auto_length": True,  # local fork: the AI decides each story's length within min..max  # local fork: the channel owner's extra instructions for the story finder
     "gaming_auto_render": True,  # local fork: render the AI's story clips as soon as they are found
     "candidate_count": None,  # None = ~1 per 4 min (3..40); else 1..60
     "daily_target": 12,  # how many publishable clips you want per day (10-15); never auto-filled with weak ones

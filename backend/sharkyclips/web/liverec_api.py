@@ -434,7 +434,8 @@ def api_gaming_settings() -> dict:
             "clip_style": config.get("clip_style") or "streamer",
             "direct_fit_bg": config.get("direct_fit_bg") or "black",
             "story_per_hour": _story()["per_hour"], "story_min_score": _story()["min_score"],
-            "story_package": config.get("story_package") is True}
+            "story_package": config.get("story_package") is True,
+            "story_auto_length": config.get("story_auto_length") is not False}
 
 
 def _story() -> dict:
@@ -465,7 +466,7 @@ def api_gaming_settings_put(body: dict) -> dict:
         changes["story_per_hour"] = int(min(max(int(body["story_per_hour"]), 2), 60))
     if body.get("story_min_score") is not None:
         changes["story_min_score"] = int(min(max(int(body["story_min_score"]), 0), 90))
-    for k in ("story_clips", "facecam_per_clip", "story_package"):
+    for k in ("story_clips", "facecam_per_clip", "story_package", "story_auto_length"):
         if k in body:
             changes[k] = bool(body[k])
     if body.get("clip_style") in ("streamer", "direct", "both"):

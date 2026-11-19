@@ -59,7 +59,32 @@ export interface BView {
 interface BClip {
   project_id: string; project_title: string; style: string; cid: string; rank: number; duration: number;
   score: number | null; type: string | null; size_mb: number; title: string; caption: string;
-  queued: Partial<Record<BPlatform, string>>; created_at: string;
+  queued: Partial<Record<BPlatform, string>>; created_at: string; why?: string; game?: string;
+  viral?: { score: number; label: "very_high" | "high" | "medium" | "low"; parts: Record<"story" | "energy" | "hook" | "words" | "length", number> };
+}
+
+function ViralBadge({ v, big }: { v: NonNullable<BClip["viral"]>; big?: boolean }) {
+  const { t } = useI18n();
+  return (
+    <span className={`gx-viral v-${v.label} ${big ? "big" : ""}`} title={t("buf.viral_hint")}>
+      🔥 {v.score}{big ? ` · ${t(`buf.viral_${v.label}`)}` : ""}
+    </span>
+  );
+}
+
+function ViralParts({ v }: { v: NonNullable<BClip["viral"]> }) {
+  const { t } = useI18n();
+  return (
+    <div className="gx-vparts">
+      {(["story", "energy", "hook", "words", "length"] as const).map((k) => (
+        <div key={k} className="gx-vpart" title={t(`buf.vp_${k}_hint`)}>
+          <span className="small">{t(`buf.vp_${k}`)}</span>
+          <span className="gx-vbar"><span style={{ width: `${v.parts[k]}%` }} /></span>
+          <span className="small mono">{v.parts[k]}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 const PLAT_SHORT: Record<BPlatform, string> = { instagram: "IG", tiktok: "TT", youtube: "YT" };
@@ -347,6 +372,7 @@ export function BufferPicker({ goSetup }: { goSetup: () => void }) {
   const [plats, setPlats] = useState<Record<BPlatform, boolean>>({ instagram: true, tiktok: true, youtube: true });
   const [project, setProject] = useState<string>("all");
   const [onlyNew, setOnlyNew] = useState(true);
+  const [sortBy, setSortBy] = useState<"viral" | "newest">("viral");
   const [startMode, setStartMode] = useState<"asap" | "at">("asap");
   const [startAt, setStartAt] = useState(() => localInput(null));
   const [pv, setPv] = useState<Record<string, { first: string | null; last: string | null; days: number }> | null>(null);
@@ -376,6 +402,7 @@ export function BufferPicker({ goSetup }: { goSetup: () => void }) {
   }, [clips]);
   const shown = (clips ?? []).filter((c) => (project === "all" || c.project_id === project)
     && (!onlyNew || !isSent(c)));
+  if (sortBy === "viral") shown.sort((a, b) => (b.viral?.score ?? 0) - (a.viral?.score ?? 0));
   const k = (c: BClip) => `${c.project_id}/${c.cid}`;
   const picked = shown.filter((c) => sel[k(c)]);
   const ready = !!v && v.keys.has_buffer && v.keys.has_host && !!v.settings.organization_id;
@@ -445,6 +472,11 @@ export function BufferPicker({ goSetup }: { goSetup: () => void }) {
           {projects.map(([id, title]) => <option key={id} value={id}>{title}</option>)}
         </select>
         <Check label={t("buf.only_new")} value={onlyNew} onChange={setOnlyNew} />
+        <select className="select select-sm" style={{ width: "auto" }} value={sortBy} aria-label={t("buf.sort")}
+          onChange={(e) => setSortBy(e.target.value === "newest" ? "newest" : "viral")}>
+          <option value="viral">{t("buf.sort_viral")}</option>
+          <option value="newest">{t("buf.sort_newest")}</option>
+        </select>
         <span className="topbar-spacer" />
         <button className="btn btn-sm" onClick={() => setSel(Object.fromEntries(shown.map((c) => [k(c), true])))}>{t("buf.select_all")}</button>
         <button className="btn btn-sm btn-ghost" onClick={() => setSel({})}>{t("buf.select_none")}</button>
@@ -472,11 +504,19 @@ export function BufferPicker({ goSetup }: { goSetup: () => void }) {
                   )}
                   <span className={`gx-tick ${on ? "on" : ""}`} aria-hidden>{on ? "✓" : ""}</span>
                   <span className="gx-dur mono">{Math.round(c.duration)} s</span>
+                  {c.viral && <span className="gx-vtop"><ViralBadge v={c.viral} /></span>}
                 </button>
                 <div className="gx-clip-body">
                   <div className="gx-headline">{ed.title}</div>
+                  {c.why && <div className="small gx-why">{c.game ? <b>{c.game} · </b> : null}{c.why}</div>}
+                  {c.viral && (
+                    <details className="gx-vdetails">
+                      <summary><ViralBadge v={c.viral} big /></summary>
+                      <ViralParts v={c.viral} />
+                    </details>
+                  )}
                   <div className="small muted">
-                    {c.project_title} · #{c.rank}{c.score != null ? ` · ${t("buf.score")} ${c.score}` : ""} · {c.style === "direct" ? t("gx.style_direct_short") : t("gx.style_streamer_short")}
+                    {c.project_title} · #{c.rank} · {c.style === "direct" ? t("gx.style_direct_short") : t("gx.style_streamer_short")}
                   </div>
                   <div className="gx-qchips">
                     {B_PLATFORMS.map((p) => c.queued[p] ? (

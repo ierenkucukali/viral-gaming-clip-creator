@@ -179,7 +179,7 @@ DEFAULTS = {
     "times": [],
     # scheduled posts Buffer holds per channel (free plan: 10)
     "queue_cap": 10,
-    "hashtags": "#gta6 #gta #gaming #streamer #fyp",
+    "hashtags": "#gaming #streamer #fyp",  # the game's own tag is added per clip (story "game")
     "youtube": {"privacy": "public", "category": "20", "made_for_kids": False, "notify": True},
     "instagram": {"share_to_feed": True, "first_comment": ""},
     "ai_label": False,
@@ -551,7 +551,13 @@ def default_texts(project, cand: dict) -> dict:
     ai_tags = [str(t) for t in (pub.get("hashtags") or [])] + ai_tags
     if str(config.get("output_language") or "en") != "tr":  # the generic game bank has Turkish tags
         ai_tags = [t for t in ai_tags if t.lower().lstrip("#") not in TR_ONLY_TAGS]
-    tags = _tags(" ".join(ai_tags[:8]) + " " + s["hashtags"])[:12]
+    game = str(story.get("game") or "").strip()
+    game_tags = []
+    if game:  # "GTA 6" -> #gta6 #gta, "Minecraft" -> #minecraft
+        slug = re.sub(r"[^\w]", "", game, flags=re.UNICODE).lower()
+        base = re.sub(r"\d+$", "", slug)
+        game_tags = [f"#{slug}"] + ([f"#{base}"] if base and base != slug and len(base) > 1 else [])
+    tags = _tags(" ".join(game_tags + ai_tags[:8]) + " " + s["hashtags"])[:12]
     if up:
         ut = "#" + re.sub(r"[^\w]", "", up, flags=re.UNICODE).lower()
         if len(ut) > 2 and ut.lower() not in (t.lower() for t in tags):
@@ -689,19 +695,33 @@ def picker() -> list[dict]:
         except Exception:  # noqa: BLE001 - a broken project never stops the others
             continue
         by_id = {c["id"]: c for c in hl.get("candidates") or []}
+        from . import viral
+
+        curve = (hl.get("curve") or {}).get("values") or []
+        res = float((hl.get("curve") or {}).get("resolution_s") or 1.0)
+        transcript = None
         for cid, clip in clips.items():
             f = project.dir / "clips" / str(clip.get("file") or "")
             c = by_id.get(cid)
             if not clip.get("file") or not f.is_file() or c is None:
                 continue
+            if transcript is None:
+                try:
+                    transcript = project.load_transcript()
+                except Exception:  # noqa: BLE001
+                    transcript = {}
             story = c.get("story") or {}
             out.append({"project_id": project.id, "project_title": meta.get("title") or project.id,
                         "style": meta.get("clip_style") or "streamer", "cid": cid, "rank": clip.get("rank"),
                         "duration": round(float(clip.get("duration") or 0), 1), "score": story.get("score"),
                         "type": story.get("type"), "size_mb": round(f.stat().st_size / 1e6, 1),
+                        "why": story.get("why") or "", "game": story.get("game") or "",
                         "rendered_at": clip.get("rendered_at") or meta.get("updated_at") or "",
                         "created_at": meta.get("created_at") or "", **default_texts(project, c),
-                        "queued": on.get((project.id, cid), {})})
+                        "queued": on.get((project.id, cid), {}),
+                        "viral": viral.compute({**c, "start": clip.get("start", c.get("start")), "end": clip.get("end", c.get("end"))},
+                                               curve, viral.clip_text(transcript, float(clip.get("start") or c["start"]),
+                                                                      float(clip.get("end") or c["end"])), res)})
     out.sort(key=lambda x: int(x["rank"] or 99))
     out.sort(key=lambda x: str(x["created_at"]), reverse=True)  # newest video first, its clips by rank
     return out

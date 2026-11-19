@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.61-1F6FE5" alt="Version 1.2.61">
+  <img src="https://img.shields.io/badge/version-1.2.64-1F6FE5" alt="Version 1.2.64">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0E1A33" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/runs%20on-your%20own%20PC-2ea043" alt="Runs on your own PC">
   <img src="https://img.shields.io/badge/AI-Claude%20%7C%20Gemini%20%7C%20local%20Ollama-D9B56A" alt="Claude, Gemini or local AI">
@@ -83,7 +83,8 @@ flowchart LR
    - The story finder reads the whole numbered transcript with those tags and returns, for each
      story, its start, peak and end line, a score and a viral headline.
    - The clips render by themselves, with captions and the headline box.
-3. **Pick & send:** watch the clips, edit a title if you like, tick the ones you want and press
+3. **Pick & send:** every clip shows a **viral score (0-99)** like OpusClip's (story, sound energy,
+   hook, hype words, length; sorted highest first). Watch the clips, edit a title if you like, tick the ones you want and press
    **Send to Buffer**. Each post gets its own time from your posting plan.
 4. **Buffer posts them** to TikTok, Instagram Reels and YouTube Shorts at those times, even while
    your PC is off.
@@ -93,8 +94,8 @@ flowchart LR
 The AI marks a story's **start** (where a stranger can start following), its **peak** (the funniest
 or most intense moment) and its **end** (the reaction is over and the sentence is finished).
 
-- Length rules (adjustable): **30–120 s, aiming for about 55 s**, the length that performs best on Reels.
-- Only stories scored 85 or more may run to the maximum. The others stay under about 90 s.
+- **Auto length:** the AI makes every clip as long as its story needs, **20 s to 3 min** (quick
+  reactions short, full stories longer, only a story that stays exciting the whole time runs long).
 - A story that is too long is trimmed from its start first (never past the setup right before the
   peak), then from its end.
 - A story that is too short gets more setup first, then more payoff.

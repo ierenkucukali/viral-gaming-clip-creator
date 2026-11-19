@@ -72,6 +72,8 @@ def settings() -> dict:
     return {"enabled": config.get("story_clips") is not False, "min": lo, "max": hi,
             "ideal": min(hi, max(lo, float(p.clip_ideal))),
             "auto": fixed <= 0, "count": min(max(fixed, 1), AUTO_MAX) if fixed > 0 else AUTO_MAX,
+            # the AI decides each story's length (min..max) instead of being held near the target
+            "auto_length": config.get("story_auto_length") is not False,
             "per_hour": min(max(per_hour, 2), 60), "min_score": min(max(min_score, 0), 90)}
 
 
@@ -87,6 +89,8 @@ def schema(max_items: int) -> dict:
     return {
         "type": "object",
         "properties": {
+            # the game being played (from the title, the talk and the streamer's words); "" when unsure
+            "game": {"type": "string", "maxLength": 60},
             "moments": {
                 "type": "array", "minItems": 0, "maxItems": max_items,
                 "items": {
@@ -105,7 +109,7 @@ def schema(max_items: int) -> dict:
                 },
             },
         },
-        "required": ["moments"],
+        "required": ["game", "moments"],
     }
 
 
@@ -219,6 +223,10 @@ streamer pressed a clip button.
 TRANSCRIPT (lines L{a}..L{b - 1}):
 {text}
 
+FIRST: name the game being played ("game"), the way gamers write it (e.g. "GTA 6", "Minecraft",
+"Fortnite", "Valorant", "Elden Ring"), from the title and what is said; "" when it isn't a game or you
+are not sure. Never guess a game that isn't clearly there.
+
 TASK: find EVERY story in this transcript that works as its own viral short clip: funny, exciting,
 surprising, emotional, skillful, rage, fails, weird NPC moments, good banter. More good clips = better,
 so don't stop at the few best ones: list all of them, up to {want} (a very lively stream gives about one
@@ -231,22 +239,37 @@ Rules for every story:
 - peak_line: the line of the funniest / most intense moment.
 - end_line: the line where the reaction or payoff is complete. End on a finished sentence, before the talk
   moves on to something else.
-- Length: {st['min']:.0f} to {st['max']:.0f} seconds (aim for about {st['ideal']:.0f} s); use the line times to check.
+{_length_rule(st)}
 - Stories must not overlap each other.
 - headline: the viral on-screen caption shown in a white box over the whole clip, written like the big
   gaming clip pages on Instagram / TikTok: third person, it NAMES the streamer (the short name viewers know,
-  e.g. "Speed" for IShowSpeed), says exactly what happens in this clip, 8 to 16 English words, ONE key word in
-  CAPITALS, then 1-2 emojis at the very end. Curiosity, shock or emotion, but TRUE to the clip; no swearing,
-  no hashtags, no quotes around it. Examples of the style (other streamers):
+  e.g. "Speed" for IShowSpeed), says exactly what happens in this clip, names the game when it is known
+  ("in GTA 6", "in Minecraft"), 8 to 16 English words, ONE key word in CAPITALS, then 1-2 emojis at the very
+  end. Use the game's own words where they fit (places, items, enemies, modes). Curiosity, shock or emotion,
+  but TRUE to the clip; no swearing, no hashtags, no quotes around it. Examples of the style (other
+  streamers and games):
   "N3on was SHOCKED after he found a hidden island in GTA 6 😭🙏",
   "Speed found a homeless NPC and gave him money 🥺❤️‍🩹",
   "xQc couldn't believe the cops followed him into the ocean 😳😂",
   "DDG got PRESSED by a Karen and LOST IT in GTA 6 😭💔",
-  "N3on tried talking to a girl and got completely REJECTED by the NPC 😳🌴".
+  "N3on tried talking to a girl and got completely REJECTED by the NPC 😳🌴",
+  "Kai Cenat got TERRIFIED when the Warden found him in Minecraft 😭💀",
+  "Tfue CLUTCHED a 1v4 with no shield left in Fortnite 🤯🔥".
 - title: a YouTube Shorts title in English (max 80 characters, no hashtags).
-- why: one English sentence: what happens and why people will watch until the end.
+- why: one short English sentence for the viewer: what happens in this clip (in this game) and why it's
+  worth watching to the end.
 - score: 0-100, honest (most good clips 55-75, only rare gems 85+).
 {_extra()}"""
+
+
+def _length_rule(st: dict) -> str:
+    if st.get("auto_length", True):
+        return (f"- Length: as long as THIS story needs, {st['min']:.0f} to {st['max']:.0f} seconds. A quick reaction "
+                "or one-liner: 20-40 s; a story with its setup: 45-90 s; only a story that stays exciting the whole "
+                f"time may run up to {st['max']:.0f} s. Never pad with calm talk and never cut the setup or the "
+                "payoff; use the line times to check.")
+    return (f"- Length: {st['min']:.0f} to {st['max']:.0f} seconds (aim for about {st['ideal']:.0f} s); "
+            "use the line times to check.")
 
 
 def _extra() -> str:
@@ -351,6 +374,7 @@ def find(project: Project, result: dict, model, *, on_progress=None) -> list[dic
     cloud = isinstance(model, CloudLLM) and model._local is None
     parts = windows(lines, cloud)
     found: list[dict] = []
+    games: dict[str, int] = {}
     t0 = time.perf_counter()
     for k, (a, b) in enumerate(parts):
         span_min = (lines[b - 1]["end"] - lines[a]["start"]) / 60
@@ -365,6 +389,9 @@ def find(project: Project, result: dict, model, *, on_progress=None) -> list[dic
         except Exception as exc:  # noqa: BLE001 - one bad part must not lose the others
             console.print(f"[yellow]Story finder: part {k + 1}/{len(parts)} failed: {exc}[/]")
             continue
+        game = " ".join(str(d.get("game") or "").split())[:60]
+        if game:
+            games[game] = games.get(game, 0) + 1
         for m in d.get("moments") or []:
             if int(m["score"]) < st["min_score"]:
                 continue  # the AI itself rates it boring
@@ -373,13 +400,18 @@ def find(project: Project, result: dict, model, *, on_progress=None) -> list[dic
                 continue
             # Reels / Shorts data: 45-60 s works best. Only the strongest stories may run to story_max;
             # the others are kept within 1.6x the target (setup kept, cut from the far ends first).
-            cap = st["max"] if int(m["score"]) >= 85 else min(st["max"], max(st["ideal"] * 1.6, st["min"] + 10))
+            cap = st["max"] if (st.get("auto_length", True) or int(m["score"]) >= 85) \
+                else min(st["max"], max(st["ideal"] * 1.6, st["min"] + 10))
             start, end = _fit(lines, s, p, e, {**st, "max": cap}, duration)
             found.append({"start": start, "end": end, "peak": round(lines[p]["start"], 2), "lines": [s, p, e],
                           "type": m["type"], "score": int(m["score"]), "headline": " ".join(m["headline"].split()),
-                          "title": " ".join(m["title"].split()), "why": " ".join(m["why"].split())})
+                          "title": " ".join(m["title"].split()), "why": " ".join(m["why"].split()),
+                          "game": game})
         if on_progress:
             on_progress(k + 1, len(parts))
+    top_game = max(games, key=games.get) if games else ""
+    for f in found:  # one name for the whole video (the parts may spell it differently)
+        f["game"] = top_game
     found.sort(key=lambda x: -x["score"])
     kept: list[dict] = []
     for f in found:
@@ -414,7 +446,8 @@ def _as_candidate(f: dict, lines: list[dict], result: dict, transcript: dict) ->
             "signal_scores": {}, "text": text,
             "quality": candidate_quality(score, reasons) if f["score"] >= 50 else "weak",
             "story": {"v": STORY_VERSION, "type": f["type"], "score": f["score"], "headline": headline,
-                      "title": f["title"], "why": f["why"], "lines": f["lines"], "audio_hype": hype}}
+                      "title": f["title"], "why": f["why"], "lines": f["lines"], "audio_hype": hype,
+                      "game": f.get("game") or ""}}
 
 
 def apply(project: Project, result: dict, *, on_progress=None) -> bool:
@@ -452,5 +485,7 @@ def apply(project: Project, result: dict, *, on_progress=None) -> bool:
         c["rank"], c["id"] = i + 1, f"c{i + 1:02d}"
     result["candidates"] = cands
     result["stories"] = {"v": STORY_VERSION, "count": len(stories), "settings": st,
-                         "seconds": round(time.perf_counter() - t0, 1), **used}
+                         "seconds": round(time.perf_counter() - t0, 1),
+                         "game": next(((c.get("story") or {}).get("game") for c in stories if (c.get("story") or {}).get("game")), ""),
+                         **used}
     return True

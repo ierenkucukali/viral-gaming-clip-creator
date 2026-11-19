@@ -99,7 +99,7 @@ def test_find_returns_ranked_non_overlapping_stories(tmp_path, monkeypatch):
     proj = FakeProject(tmp_path, 100)
     result = {"duration": 600.0, "curve": {"values": [0.1] * 600}, "candidates": [
         {"reasons": [{"code": "laughter", "t": 130.0, "strength": 0.9}]}]}
-    model = FakeModel([{"moments": [_moment(10, 20, 30, 70), _moment(12, 22, 31, 60),  # overlaps the first
+    model = FakeModel([{"game": "GTA 6", "moments": [_moment(10, 20, 30, 70), _moment(12, 22, 31, 60),  # overlaps the first
                                     _moment(60, 70, 80, 85, "He said WHAT 😭"),
                                     _moment(40, 41, 42, 55, "Damn this is sh*t 💩")]}])
     out = storyfind.find(proj, result, model)
@@ -107,6 +107,8 @@ def test_find_returns_ranked_non_overlapping_stories(tmp_path, monkeypatch):
     assert all(45.0 <= c["duration"] <= 120.0 for c in out)
     assert out[0]["story"]["headline"] == "He said WHAT 😭"
     assert out[0]["reasons"][0]["code"] == "llm_story"
+    assert {c["story"]["game"] for c in out} == {"GTA 6"}  # the game the AI named, on every story
+    assert "FIRST: name the game being played" in model.prompts[0] and "names the game when it is known" in model.prompts[0]
     assert "[laugh]" in model.prompts[0] or "laugh" in model.prompts[0]  # signals are written next to the lines
     assert "Whole video" not in model.prompts[0] or "L0" in model.prompts[0]
 
@@ -244,3 +246,18 @@ def test_gemini_daily_quota_is_recognised():
 
     wait, daily = llmcloud._gemini_retry(R())
     assert daily and 17 <= wait <= 19
+
+
+def test_auto_length_lets_the_ai_decide_within_20_s_to_3_min(monkeypatch):
+    from sharkyclips import config as C
+
+    real = C.get
+    monkeypatch.setattr(C, "get", lambda k: {"mode_tuning": {"gaming": {"clip_min": 20, "clip_ideal": 55, "clip_max": 180,
+                                                                         "pre_roll": [8, 20], "min_gap": 60}}}.get(k, real(k)))
+    st = storyfind.settings()
+    assert st["min"] == 20 and st["max"] == 180 and st["auto_length"] is True
+    rule = storyfind._length_rule(st)
+    assert "as long as THIS story needs" in rule and "20 to 180 seconds" in rule
+    lines = _lines(100)  # a 3-minute story (L0..L30, 6 s a line) stays whole: no 1.6x-target cap
+    s, e = storyfind._fit(lines, 0, 20, 29, {**st, "max": st["max"]}, 600.0)
+    assert 170 <= e - s <= 180

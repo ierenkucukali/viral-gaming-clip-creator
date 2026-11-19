@@ -7,6 +7,168 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.64] - 2026-11-19
+### Clips written for the game that is played
+- **The AI names the game** of every video (from the title and what is said) and writes for it: the
+  headline names the game ("in GTA 6", "in Minecraft"), the description says briefly what happens in
+  the clip with the game's own words (places, items, enemies), and the game's hashtag is added
+  (#gta6 #gta, #minecraft...). The fixed hashtags are now general (#gaming #streamer #fyp).
+- **Pick & send shows what happens** in each clip in one short line, with the game.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Klipler oynanan oyuna göre yazılır
+- **Yapay zekâ her videonun oyununu tespit eder** (başlıktan ve konuşmalardan) ve ona göre yazar:
+  başlık oyunu anar ("in GTA 6", "in Minecraft"), açıklama klipte ne olduğunu oyunun kendi
+  kelimeleriyle (yerler, eşyalar, düşmanlar) kısaca anlatır, oyunun hashtag'i eklenir (#gta6 #gta,
+  #minecraft...). Sabit hashtag'ler artık genel (#gaming #streamer #fyp).
+- **"Seç ve gönder" her klipte ne olduğunu** oyunla birlikte tek kısa satırda gösterir.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Die KI erkennt das Spiel jedes Videos und schreibt passend dazu: Überschrift, kurze Beschreibung mit den Begriffen des Spiels und der Hashtag des Spiels. „Auswählen & senden“ zeigt in einer Zeile, was im Clip passiert.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- Az MI felismeri minden videó játékát, és ahhoz igazítva ír: cím, rövid leírás a játék saját szavaival és a játék hashtagje. A „Kiválasztás és küldés” egy sorban mutatja, mi történik a klipben.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- ИИ определяет игру каждого видео и пишет под неё: заголовок, краткое описание словами самой игры и хэштег игры. «Выбрать и отправить» показывает одной строкой, что происходит в клипе.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- يتعرف الذكاء الاصطناعي على لعبة كل فيديو ويكتب وفقها: العنوان، ووصف قصير بمفردات اللعبة نفسها، ووسم اللعبة. يعرض «الاختيار والإرسال» في سطر واحد ما يحدث في المقطع.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- AI 会识别每个视频所玩的游戏，并据此撰写：标题会点明游戏（如“in GTA 6”“in Minecraft”），描述会用游戏自己的词汇（地点、道具、敌人）简要说明剪辑里发生了什么，并加上该游戏的话题标签（#gta6 #gta、#minecraft 等）。固定话题标签改为通用的 #gaming #streamer #fyp。“选择并发送”会用一行简短文字显示每个剪辑的内容和游戏。
+
+</details>
+
+## [1.2.63] - 2026-11-19
+### Viral score on every clip
+- **Every clip shows a viral score (0-99)** in Pick & send, like OpusClip: a colored badge on the
+  picture and, when you click it, the five parts: **Story** (the AI's judgment of setup, peak and
+  payoff, and whether viewers want to see the end), **Energy** (how hard the sound peaks, long shouting
+  or panic, laughs and shouts), **Hook** (the peak early, action in the first 5 seconds), **Words**
+  (hype words, "NO NO NO" repeats, fast speech, bursts after silence) and **Length** (30-90 s best).
+- **Sort by viral score** (highest first, the default) or by newest video. No extra AI cost: it uses
+  what the analysis already measured.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Her klipte viral skor
+- **Her klip "Seç ve gönder"de bir viral skor (0-99) gösterir**, OpusClip gibi: resmin üzerinde renkli
+  bir rozet ve tıklayınca beş parça: **Story** (yapay zekânın kurgu, zirve ve sonuç değerlendirmesi,
+  izleyicinin sonunu görmek isteyip istemeyeceği), **Energy** (sesin patlama anı, uzun bağırma veya
+  panik, gülme ve bağırmalar), **Hook** (zirvenin erken gelmesi, ilk 5 saniyedeki hareket), **Words**
+  (heyecan kelimeleri, "NO NO NO" tekrarları, hızlı konuşma, sessizlikten sonra patlama) ve **Length**
+  (30-90 sn en iyisi).
+- **Viral skora göre sırala** (varsayılan, en yüksek önce) ya da en yeni videoya göre. Ek yapay zekâ
+  maliyeti yok.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Jeder Clip zeigt einen Viral-Score (0-99) mit fünf Teilen: Story, Energie (Ton), Hook, Wörter und Länge. Sortierung nach Viral-Score. Keine zusätzlichen KI-Kosten.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- Minden klip virális pontszámot mutat (0-99) öt résszel: történet, energia (hang), hook, szavak és hossz. Rendezés virális pontszám szerint. Nincs extra MI-költség.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Каждый клип показывает вирусный балл (0-99) из пяти частей: история, энергия (звук), хук, слова и длина. Сортировка по вирусному баллу. Без дополнительных затрат на ИИ.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- يعرض كل مقطع درجة انتشار (0-99) من خمسة أجزاء: القصة، الطاقة (الصوت)، الجذب، الكلمات والطول. الترتيب حسب درجة الانتشار. بلا تكلفة ذكاء اصطناعي إضافية.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- 每个剪辑在“选择并发送”中都会显示爆款分数（0-99），类似 OpusClip：图片上有彩色标记，点击后显示五个部分——故事（AI 对铺垫、高潮和结尾的判断）、能量（声音爆点、长时间喊叫或慌乱、笑声和喊声）、钩子（高潮出现得早、前 5 秒的动作）、用词（兴奋词、“NO NO NO”式重复、快语速）和时长（30-90 秒最佳）。默认按爆款分数从高到低排序，不增加 AI 费用。
+
+</details>
+
+## [1.2.62] - 2026-11-19
+### The AI decides each clip's length
+- **Auto length (on by default).** Every clip is as long as its story needs: a quick reaction 20-40 s,
+  a story with its setup 45-90 s, and only a story that stays exciting the whole time up to 3 minutes.
+  The limits are now 20 seconds to 3 minutes (Setup > Clip shape: min / max length and the "Auto
+  length" switch). Before, most clips were held near the target length.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Her klibin uzunluğuna yapay zekâ karar verir
+- **Otomatik uzunluk (varsayılan açık).** Her klip hikâyesi ne kadar gerektiriyorsa o kadar uzun olur:
+  kısa bir tepki 20-40 sn, kurgulu bir hikâye 45-90 sn, sadece baştan sona heyecanlı bir hikâye 3
+  dakikaya kadar. Sınırlar artık 20 saniye ile 3 dakika (Kurulum > Klip şekli: en kısa / en uzun süre
+  ve "Auto length" anahtarı).
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Automatische Länge: jeder Clip ist so lang, wie seine Story braucht (20 Sekunden bis 3 Minuten); schnelle Reaktionen kurz, ganze Storys länger.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- Automatikus hossz: minden klip olyan hosszú, amennyit a története igényel (20 másodperctől 3 percig); a gyors reakciók rövidek, a teljes történetek hosszabbak.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Автоматическая длина: каждый клип такой длины, какой требует его история (от 20 секунд до 3 минут); быстрые реакции короче, полные истории длиннее.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- الطول التلقائي: كل مقطع بالطول الذي تحتاجه قصته (من 20 ثانية إلى 3 دقائق)؛ ردود الفعل السريعة قصيرة والقصص الكاملة أطول.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- 自动长度（默认开启）：每个剪辑的长度由它的故事决定——快速反应 20-40 秒，带铺垫的故事 45-90 秒，只有从头到尾都精彩的故事才会长达 3 分钟。长度范围现在是 20 秒到 3 分钟（设置 > 剪辑形状：最短/最长时长和“自动长度”开关）。
+
+</details>
+
 ## [1.2.61] - 2026-11-19
 ### Trim a YouTube link before it downloads
 - **Preview & pick the part, without downloading.** With "Let me trim the video before clipping"
