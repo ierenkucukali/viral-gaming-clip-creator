@@ -48,6 +48,7 @@ YT_CATEGORIES = {"20": "Gaming", "24": "Entertainment", "23": "Comedy", "22": "P
 LEAD_MIN = 10  # a new slot is at least this far ahead
 SYNC_EVERY_S = 15 * 60
 DAILY_BUDGET = 500  # Buffer free plan: 600 requests / 24 h (shared with Buffer's MCP); keep a margin
+DAILY_BUDGET_PAID = 1500  # paid plans (Essentials...): 1,800 requests / 24 h
 SEND_MAX = 200  # clips in one "Send" (the room in Buffer limits it anyway)
 ROOM_CACHE_S = 60
 MAX_UPLOAD_BYTES = 99 * 1024 * 1024  # Cloudinary free plan: 100 MB per video
@@ -311,13 +312,22 @@ def _http():  # the `requests` module (tests swap in a fake)
     return requests
 
 
+def daily_budget() -> int:
+    """A paid plan (more than the free plan's 10 posts per channel) gets 1,800 requests a day."""
+    try:
+        return DAILY_BUDGET_PAID if int(settings().get("queue_cap") or 0) > 10 else DAILY_BUDGET
+    except Exception:  # noqa: BLE001
+        return DAILY_BUDGET
+
+
 def _budget(st: dict | None) -> None:
     if st is None:
         return
     now = time.time()
     st["requests"] = [t for t in st["requests"] if t > now - 86400] + [now]
-    if len(st["requests"]) > DAILY_BUDGET:
-        raise BufferError("Paused: close to Buffer's daily request limit (600 a day on the free plan).",
+    if len(st["requests"]) > daily_budget():
+        raise BufferError("Paused: close to Buffer's daily request limit (600 a day on the free plan, "
+                          "1,800 on a paid plan).",
                           "It goes on by itself within 24 hours.", code="BUDGET")
 
 
@@ -371,6 +381,10 @@ M_EDIT = """mutation($input: EditPostInput!) { editPost(input: $input) {
 Q_SCHEDULED = """query($org: OrganizationId!, $ch: [ChannelId!]) {
   posts(first: 100, input: {organizationId: $org, filter: {status: [scheduled], channelIds: $ch}}) {
     edges { node { id channelId dueAt } } } }"""
+# every scheduled post of the channels (all pages; also posts made elsewhere: Buffer itself, another PC)
+Q_SCHEDULED_ALL = """query($org: OrganizationId!, $ch: [ChannelId!], $after: String) {
+  posts(first: 100, after: $after, input: {organizationId: $org, filter: {status: [scheduled], channelIds: $ch}}) {
+    edges { node { id channelId dueAt assets { source } } } pageInfo { hasNextPage endCursor } } }"""
 Q_DAILY = """query($ids: [ChannelId!]!) { dailyPostingLimits(input: {channelIds: $ids}) { channelId limit } }"""
 Q_POST = """query($id: PostId!) { post(input: {id: $id}) { id status dueAt sentAt externalLink
   error { message } } }"""
@@ -604,7 +618,7 @@ def _plan_day(x: datetime, s: dict):
     morning posts count for the evening they started on."""
     loc = _local(x)
     if s["mode"] == "spread" and s["window_end"] < s["window_start"] \
-            and loc.strftime("%H:%M") < s["window_end"]:
+            and loc.strftime("%H:%M") <= s["window_end"]:
         return loc.date() - timedelta(days=1)
     return loc.date()
 
@@ -743,6 +757,66 @@ def picker() -> list[dict]:
 _ROOM: dict = {"at": 0.0, "room": {}, "in_buffer": {}, "error": None}
 
 
+def scheduled_all(st: dict, s: dict | None = None) -> list[dict]:
+    """Every post waiting in Buffer on our channels: [{id, platform, due, source}] (all pages)."""
+    s = s or settings()
+    chans = {v: k for k, v in s["channels"].items() if v}
+    out: list[dict] = []
+    for ch in chans:
+        after = None
+        for _ in range(50):
+            d = (gql(Q_SCHEDULED_ALL, {"org": s["organization_id"], "ch": [ch], "after": after}, st).get("posts") or {})
+            for e in d.get("edges") or []:
+                n = e.get("node") or {}
+                out.append({"id": n.get("id"), "platform": chans.get(n.get("channelId")), "due": _parse(n.get("dueAt")),
+                            "source": ((n.get("assets") or [{}])[0] or {}).get("source")})
+            info = d.get("pageInfo") or {}
+            if not info.get("hasNextPage"):
+                break
+            after = info.get("endCursor")
+    return out
+
+
+def _others(st: dict, s: dict) -> dict[str, list[datetime]]:
+    """The times of the posts in Buffer this PC didn't make (Buffer itself, another PC): they count
+    in the posting plan like ours."""
+    mine = {i.get("post_id") for i in st["items"] if i.get("post_id")}
+    out: dict[str, list[datetime]] = {p: [] for p in PLATFORMS}
+    for x in scheduled_all(st, s):
+        if x["id"] not in mine and x["platform"] in out and x["due"]:
+            out[x["platform"]].append(x["due"])
+    return out
+
+
+def clip_slot(st: dict, platforms: list[str], s: dict, begin: datetime | None = None,
+              others: dict | None = None, now: datetime | None = None) -> datetime | None:
+    """One time for a clip on all its platforms (the same clip goes out at the same minute everywhere):
+    the first time of the plan where every platform still has room that night (per_day, everything in
+    Buffer counted) and that calendar day (the network's daily limit)."""
+    now = now or datetime.now(timezone.utc)
+    taken = {p: _taken(st, p) + list((others or {}).get(p) or []) for p in platforms}
+    earliest = max(now + timedelta(minutes=LEAD_MIN), begin or now)
+    day = _plan_day(earliest, s)
+    n = min(s["per_day"][p] for p in platforms)
+    for _ in range(800):
+        for t in _day_times(day, n, s):
+            if t < earliest:
+                continue
+            ok = True
+            for p in platforms:
+                tk = taken[p]
+                lim = s["daily_limits"].get(p) or 0
+                if (sum(1 for x in tk if _plan_day(x, s) == day) >= s["per_day"][p]
+                        or (lim and sum(1 for x in tk if _local(x).date() == _local(t).date()) >= lim)
+                        or any(abs((t - x).total_seconds()) < 60 for x in tk)):
+                    ok = False
+                    break
+            if ok:
+                return t
+        day += timedelta(days=1)
+    return None
+
+
 def room(fresh: bool = False) -> dict:
     """How many more posts Buffer takes now per platform: queue_cap minus what is scheduled there
     (also posts made in Buffer itself). One request, cached for a minute."""
@@ -756,13 +830,10 @@ def room(fresh: bool = False) -> dict:
         try:
             with _lock:
                 st = load_state()
-                d = gql(Q_SCHEDULED, {"org": s["organization_id"], "ch": list(chans.values())}, st)
+                for x in scheduled_all(st, s):  # all pages (a channel can hold hundreds)
+                    if x["platform"] in counts:
+                        counts[x["platform"]] += 1
                 _save_state(st)
-            by_chan = {v: k for k, v in chans.items()}
-            for e in ((d.get("posts") or {}).get("edges") or []):
-                p = by_chan.get((e.get("node") or {}).get("channelId"))
-                if p:
-                    counts[p] += 1
         except SharkyClipsError as exc:  # unknown: count our own posts in Buffer instead
             err = str(exc)
             st = load_state()
@@ -834,11 +905,26 @@ def send(picks: list[dict], start: str | None = None, wait: bool = False) -> dic
 
 def _send_all(todo: list[dict], begin: datetime | None, s: dict) -> None:
     try:
+        try:  # the posts already in Buffer that this PC didn't make count in the plan too
+            with _lock:
+                st = load_state()
+                others = _others(st, s)
+                _save_state(st)
+        except SharkyClipsError:
+            others = {}
+        slots: dict[tuple, str | None] = {}
         for it in todo:
             with _lock:
                 st = load_state()
+                key = (it["project_id"], it["cid"])
+                if key not in slots:  # one time per clip: the same minute on every platform
+                    plats = [x["platform"] for x in todo if (x["project_id"], x["cid"]) == key]
+                    t = clip_slot(st, plats, s, begin, others)
+                    slots[key] = _iso(t) if t else None
                 try:
-                    r = _send_one(st, it, begin, s)
+                    if not slots[key]:
+                        raise BufferError("No free time found in the posting plan.", code="NOSLOT")
+                    r = _send_one(st, {**it, "due_at": slots[key]}, begin, s)
                 except BufferError as exc:
                     r = "stop" if exc.code in ("UNAUTHORIZED", "FORBIDDEN", "NOKEY", "NOCLOUD", "RATE_LIMIT_EXCEEDED",
                                                "BUDGET", "NETWORK") else "error"
@@ -866,7 +952,7 @@ def _record(st: dict, it: dict, state_: str, **extra) -> dict:
 
 def _send_one(st: dict, it: dict, begin: datetime | None, s: dict) -> str:
     p = it["platform"]
-    slot = next_slots(st, p, 1, None, s, begin)
+    slot = [_parse(it["due_at"])] if it.get("due_at") else next_slots(st, p, 1, None, s, begin)
     if not slot:
         raise BufferError("No free time found in the posting plan.", code="NOSLOT")
     it = {**it, "due_at": _iso(slot[0])}
@@ -1135,7 +1221,7 @@ def view() -> dict:
                   "room": (rm.get("room") or {}).get(p), "in_buffer": (rm.get("in_buffer") or {}).get(p),
                   "next_free": [_iso(x) for x in nxt], "planned_until": last, "day": example_day(s, p)}
     return {"settings": s, "keys": keys_view(), "platforms": per, "paused": st["paused"],
-            "requests_24h": len(st["requests"]), "budget": DAILY_BUDGET, "sending": sending(),
+            "requests_24h": len(st["requests"]), "budget": daily_budget(), "sending": sending(),
             "room_checked_at": rm.get("at") or None, "room_error": rm.get("error"),
             "items": [{k: v for k, v in i.items() if k not in ("file",)} for i in items][-600:],
             "log": st["log"][-60:][::-1], "youtube_categories": YT_CATEGORIES}

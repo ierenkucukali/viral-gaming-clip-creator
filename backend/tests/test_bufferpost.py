@@ -33,6 +33,7 @@ class FakeNet:
         self.room_asks = 0
         self.plan_limit = 10
         self.own: dict[str, int] = {}  # posts the user scheduled in Buffer itself, per channel
+        self.own_due: dict[str, str] = {}
         self.uploads: list[str] = []
         self.destroyed: list[str] = []
         self.limit = 10
@@ -75,8 +76,9 @@ class FakeNet:
             self.room_asks += 1
             nodes = [{"id": k, "channelId": p["channelId"], "dueAt": p["dueAt"]} for k, p in self.posts.items()
                      if p["status"] == "scheduled" and p["channelId"] in v["ch"]]
-            nodes += [{"id": f"own{k}", "channelId": c, "dueAt": "2026-12-01T10:00:00Z"} for c, n in self.own.items() for k in range(n)]
-            return {"data": {"posts": {"edges": [{"node": n} for n in nodes]}}}
+            nodes += [{"id": f"own{k}", "channelId": c, "dueAt": self.own_due.get(c, "2026-12-01T10:00:00Z")}
+                      for c, n in self.own.items() for k in range(n) if c in v["ch"]]
+            return {"data": {"posts": {"edges": [{"node": n} for n in nodes], "pageInfo": {"hasNextPage": False}}}}
         if "createPost" in q:
             inp = v["input"]
             n = sum(1 for p in self.posts.values() if p["channelId"] == inp["channelId"] and p["status"] == "scheduled")
@@ -520,3 +522,21 @@ def test_an_overnight_window_runs_into_the_next_morning():
     assert got[0].strftime("%d %H:%M") == "20 20:00" and got[19].strftime("%d %H:%M") == "21 10:00"
     assert got[20].strftime("%d %H:%M") == "21 20:00"  # the next night, not 21 10:44
     assert all(not ("10:00" < x.strftime("%H:%M") < "20:00") for x in got)
+
+
+def test_one_time_per_clip_on_every_platform_counting_posts_made_elsewhere():
+    """Local fork: posts in Buffer this PC didn't make (another PC) count in the night's 20, and a clip
+    goes out at the same minute on every platform."""
+    B.save_settings({"mode": "spread", "window_start": "20:00", "window_end": "10:00",
+                     "per_day": {"tiktok": 2, "instagram": 2, "youtube": 2}})
+    s = B.settings()
+    now = datetime(2026, 11, 20, 13, 0).astimezone().astimezone(timezone.utc)
+    night = datetime(2026, 11, 20, 21, 0).astimezone().astimezone(timezone.utc)
+    st = {"items": []}
+    t1 = B.clip_slot(st, ["tiktok", "youtube"], s, now=now, others={"tiktok": [night]})
+    assert t1.astimezone().strftime("%d %H:%M") == "20 20:00"
+    st["items"] += [{"platform": p, "state": "scheduled", "due_at": B._iso(t1)} for p in ("tiktok", "youtube")]
+    # tiktok's night is full now (ours + the other PC's): the clip waits for the next night everywhere
+    t2 = B.clip_slot(st, ["tiktok", "youtube"], s, now=now, others={"tiktok": [night]})
+    assert t2.astimezone().strftime("%d %H:%M") == "21 20:00"
+    assert B.clip_slot(st, ["youtube"], s, now=now).astimezone().strftime("%d %H:%M") == "21 10:00"

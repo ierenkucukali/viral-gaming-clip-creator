@@ -7,6 +7,63 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.67] - 2026-11-20
+### Every post in Buffer counts, and a clip goes out everywhere at once
+- **Posts in Buffer that this PC didn't make count in the plan too** (a second PC, posts made in Buffer
+  itself): "20 a day" is 20 in all, and new clips go after them. Buffer is read page by page, so channels
+  with more than 100 waiting posts are counted right.
+- **A clip goes out at the same minute on TikTok, Instagram and YouTube**, and never past a network's
+  daily limit (TikTok 25 a day).
+- **Paid Buffer plans get their real request budget** (1,800 a day instead of the free plan's 600):
+  sending a big pick no longer pauses half-way.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Buffer'daki her gönderi sayılır, bir klip her yerde aynı anda çıkar
+- **Buffer'da bu bilgisayarın yapmadığı gönderiler de plana sayılır** (ikinci bir bilgisayar, Buffer'ın
+  kendisinde yapılanlar): "günde 20" toplam 20 demektir ve yeni klipler onların arkasına gelir. Buffer
+  sayfa sayfa okunur, 100'den fazla gönderisi bekleyen kanallar da doğru sayılır.
+- **Bir klip TikTok, Instagram ve YouTube'da aynı dakikada çıkar** ve hiçbir platformun günlük sınırını
+  aşmaz (TikTok günde 25).
+- **Ücretli Buffer planları gerçek istek sınırını kullanır** (ücretsiz planın 600'ü yerine günde 1.800):
+  büyük bir seçimi göndermek artık yarıda durmaz.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Beiträge in Buffer, die nicht von diesem PC stammen, zählen im Plan mit; ein Clip erscheint auf TikTok, Instagram und YouTube in derselben Minute; bezahlte Buffer-Pläne nutzen 1.800 Anfragen pro Tag.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- A Bufferben lévő, nem erről a gépről készült bejegyzések is beszámítanak; egy klip ugyanabban a percben jelenik meg TikTokon, Instagramon és YouTube-on; a fizetős Buffer-csomagok napi 1800 kérést használnak.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Посты в Buffer, сделанные не с этого ПК, тоже учитываются в плане; клип выходит в TikTok, Instagram и YouTube в одну минуту; платные планы Buffer используют 1 800 запросов в день.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- تُحسب في الخطة أيضًا منشورات Buffer التي لم يُنشئها هذا الجهاز؛ ويُنشر المقطع على TikTok وInstagram وYouTube في الدقيقة نفسها؛ وتستخدم خطط Buffer المدفوعة 1800 طلب يوميًا.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- Buffer 中不是由这台电脑创建的帖子（另一台电脑或在 Buffer 里直接创建的）现在也计入发布计划，“每天 20 条”就是总共 20 条，新剪辑排在它们后面。同一个剪辑会在 TikTok、Instagram 和 YouTube 的同一分钟发布，且不超过各平台的每日上限（TikTok 每天 25 条）。付费 Buffer 计划使用每天 1800 次请求的真实额度，发送大量剪辑不再中途暂停。
+
+</details>
+
 ## [1.2.66] - 2026-11-20
 ### Posting through the night
 - **The posting window can run through the night**, for example 20:00 -> 10:00 (the US afternoon
