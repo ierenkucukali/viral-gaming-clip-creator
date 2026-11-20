@@ -7,6 +7,55 @@ All notable changes to SharkyClips (called ClipForge before 1.2.1). The format f
 Each entry is in English, then Turkish; short summaries in the other UI languages follow in
 `<!-- lang:xx -->` blocks. The app's "What's new" window shows the block of the UI language.
 
+## [1.2.66] - 2026-11-20
+### Posting through the night
+- **The posting window can run through the night**, for example 20:00 -> 10:00 (the US afternoon
+  and evening seen from Europe). Posts of the early morning count for the evening they started on,
+  so "20 a day" means 20 a night.
+
+<!-- lang:tr -->
+**Türkçe**
+
+### Gece boyunca paylaşım
+- **Paylaşım aralığı gece boyunca sürebilir**, örneğin 20:00 -> 10:00 (Avrupa'dan bakınca
+  Amerika'nın öğleden sonrası ve akşamı). Sabaha karşı paylaşımlar başladıkları akşama sayılır, yani
+  "günde 20" bir gecede 20 demektir.
+
+<details><summary>Deutsch</summary>
+
+<!-- lang:de -->
+- Das Zeitfenster für Beiträge kann über Nacht laufen (z. B. 20:00 -> 10:00); Beiträge am frühen Morgen zählen zum Abend davor.
+
+</details>
+
+<details><summary>Magyar</summary>
+
+<!-- lang:hu -->
+- A közzétételi időablak átnyúlhat az éjszakán (pl. 20:00 -> 10:00); a hajnali bejegyzések az előző estéhez számítanak.
+
+</details>
+
+<details><summary>Русский</summary>
+
+<!-- lang:ru -->
+- Окно публикаций может идти через ночь (например, 20:00 -> 10:00); ранние утренние посты считаются за предыдущий вечер.
+
+</details>
+
+<details><summary>العربية</summary>
+
+<!-- lang:ar -->
+- يمكن أن تمتد نافذة النشر طوال الليل (مثل 20:00 -> 10:00)؛ وتُحسب منشورات الصباح الباكر للمساء الذي بدأت فيه.
+
+</details>
+
+<details><summary>中文</summary>
+
+<!-- lang:zh -->
+- 发布时间段现在可以跨越夜晚，例如晚上 20:00 到第二天早上 10:00，从欧洲看正好是美国的下午和晚上。凌晨发布的帖子计入开始的那个晚上，所以设置“每天 20 条”就表示每晚发布 20 条，三个平台的同一个剪辑在同一时间发布。
+
+</details>
+
 ## [1.2.65] - 2026-11-19
 ### A failed post can be retried
 - **The video of a post that failed stays online for 7 days** (it was removed 30 minutes after the

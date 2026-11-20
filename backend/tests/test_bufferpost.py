@@ -506,3 +506,17 @@ def test_a_failed_posts_video_stays_for_a_retry(env):
     assert env.net.destroyed == []  # kept: the YouTube post may be retried
     B.tick(now=soon + timedelta(days=8))
     assert len(env.net.destroyed) == 1  # a week later it is cleaned up
+
+
+def test_an_overnight_window_runs_into_the_next_morning():
+    """Local fork: 20:00 -> 10:00 (US afternoon / evening from Europe), 20 a day: the night's early
+    morning posts count for the evening they started on."""
+    B.save_settings({"mode": "spread", "window_start": "20:00", "window_end": "10:00",
+                     "per_day": {"tiktok": 20}, "daily_limits": {"tiktok": 25}})
+    s = B.settings()
+    assert (s["window_start"], s["window_end"]) == ("20:00", "10:00")
+    now = datetime(2026, 11, 20, 13, 0).astimezone().astimezone(timezone.utc)
+    got = [x.astimezone() for x in B.next_slots({"items": []}, "tiktok", 25, now=now, s=s)]
+    assert got[0].strftime("%d %H:%M") == "20 20:00" and got[19].strftime("%d %H:%M") == "21 10:00"
+    assert got[20].strftime("%d %H:%M") == "21 20:00"  # the next night, not 21 10:44
+    assert all(not ("10:00" < x.strftime("%H:%M") < "20:00") for x in got)

@@ -218,8 +218,8 @@ def settings() -> dict:
     s["platforms"] = {p: bool(s["platforms"].get(p)) for p in PLATFORMS}
     s["window_start"] = _hhmm(s["window_start"]) or "10:00"
     s["window_end"] = _hhmm(s["window_end"]) or "23:00"
-    if s["window_end"] <= s["window_start"]:
-        s["window_end"] = "23:59"
+    if s["window_end"] == s["window_start"]:
+        s["window_end"] = "23:59"  # (end before start = overnight, e.g. 20:00 -> 10:00 the next morning)
     s["times"] = sorted({t for t in (_hhmm(x) for x in (s["times"] or [])) if t})
     s["mode"] = s["mode"] if s["mode"] in MODES else "spread"
     if s["mode"] == "times" and not s["times"]:
@@ -591,10 +591,22 @@ def _day_times(day, n: int, s: dict) -> list[datetime]:
         out = [first + timedelta(minutes=s["gap_min"] * i) for i in range(n)]
         return [t for t in out if t < end]  # never runs into the next day
     a, b = at(s["window_start"]), at(s["window_end"])
+    if b <= a:  # overnight window: 20:00 -> 10:00 the next morning
+        b += timedelta(days=1)
     if n == 1:
         return [a + (b - a) / 2]
     step = (b - a) / (n - 1)
     return [(a + step * i).replace(second=0, microsecond=0) for i in range(n)]
+
+
+def _plan_day(x: datetime, s: dict):
+    """The posting day a time belongs to: with an overnight window (20:00 -> 10:00) the night's early
+    morning posts count for the evening they started on."""
+    loc = _local(x)
+    if s["mode"] == "spread" and s["window_end"] < s["window_start"] \
+            and loc.strftime("%H:%M") < s["window_end"]:
+        return loc.date() - timedelta(days=1)
+    return loc.date()
 
 
 def _taken(st: dict, platform: str) -> list[datetime]:
@@ -612,10 +624,10 @@ def next_slots(st: dict, platform: str, count: int, now: datetime | None = None,
     earliest = max(now + timedelta(minutes=LEAD_MIN), start or now)
     per_day = s["per_day"][platform]
     out: list[datetime] = []
-    day = _local(earliest).date()
+    day = _plan_day(earliest, s)
     for _ in range(800):
         times = _day_times(day, per_day, s)
-        used = sum(1 for x in taken + out if _local(x).date() == day)  # pinned / moved posts count too
+        used = sum(1 for x in taken + out if _plan_day(x, s) == day)  # pinned / moved posts count too
         for t in times:
             if used >= per_day:
                 break

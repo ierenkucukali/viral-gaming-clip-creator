@@ -614,9 +614,11 @@ function exampleDay(mode: string, n: number, a: string, b: string, start: string
   }
   const a0 = mins(a) ?? 600;
   let b0 = mins(b) ?? 1380;
-  if (b0 <= a0) b0 = 1439;
-  if (k === 1) return [fmt(a0 + (b0 - a0) / 2)];
-  return Array.from({ length: k }, (_, i) => a0 + ((b0 - a0) * i) / (k - 1)).map(fmt);
+  if (b0 === a0) b0 = 1439;
+  if (b0 < a0) b0 += 1440; // overnight: 20:00 -> 10:00 the next morning
+  const fmtDay = (x: number) => fmt(x % 1440);
+  if (k === 1) return [fmtDay(a0 + (b0 - a0) / 2)];
+  return Array.from({ length: k }, (_, i) => a0 + ((b0 - a0) * i) / (k - 1)).map(fmtDay);
 }
 
 export function PostingPlan({ v, setV }: { v: BView; setV: (v: BView) => void }) {
